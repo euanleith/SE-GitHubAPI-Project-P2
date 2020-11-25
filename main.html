@@ -9,10 +9,26 @@
     <p>Enter the desired user, along with the specific repo is desired, and authorization token if necessary:</p>
 
     <form id="myForm">
-        User*: <input type="text" id="username" , value="" , required="required"><br>
-        Repository: <input type="text" id="repo" , value=""><br><br>
-        OAuth token: <input type="text" id="token" , value=""><br>
-        <input type="button" onclick="queryRepo()" value="Submit">
+        User*: <input type="text" id="username" value="" required="required"><br>
+        OAuth token*: <input type="text" id="token" value="" required="required"><br>
+        Repository: <input type="text" id="repo" value=""><br><br>
+        <input type="button" onclick="getUserRepoInfo()" value="Submit">
+    </form>
+
+    <p>Get the number of commits by author for a repo:</p>
+
+    <form id="repoCommitsForm">
+        Repository*: <input type="text" id="repoCommits" value="" required="required"><br>
+        OAuth token*: <input type="text" id="tokenCommits" value="" required="required"><br>
+        <input type="button" onclick="getNCommitsByAuthor()" value="Submit">
+    </form>
+
+    <p>Get the number of issues resolved by author for a repo:</p>
+
+    <form id="repoIssuesForm">
+        Repository*: <input type="text" id="repoIssues" value="" required="required"><br>
+        OAuth token*: <input type="text" id="tokenIssues" value="" required="required"><br>
+        <input type="button" onclick="getNIssuesResolvedByAuthor()" value="Submit">
     </form>
 </body>
 </html>
