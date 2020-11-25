@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <script type="text/javascript" src="main.js"></script>
+</head>
+<body>
+    <p>Enter the desired user, along with the specific repo is desired, and authorization token if necessary:</p>
+
+    <form id="myForm">
+        User*: <input type="text" id="username" , value="" , required="required"><br>
+        Repository: <input type="text" id="repo" , value=""><br><br>
+        OAuth token: <input type="text" id="token" , value=""><br>
+        <input type="button" onclick="queryRepo()" value="Submit">
+    </form>
+</body>
+</html>
