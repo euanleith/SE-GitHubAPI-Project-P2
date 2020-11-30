@@ -56,37 +56,7 @@ function getNIssuesResolvedByAuthor() {
         return false;
     }
 
-    // get issues
-    let cont = true;
-    let json = [];
-    const request = new XMLHttpRequest();
-    for (let i = 0; cont; i++) {
-        let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed&page=' + i;
-        request.open('GET', url, false);
-        request.setRequestHeader('Authorization', 'token ' + token);
-        request.send();
-        let json1 = JSON.parse(request.responseText);
-        if (json.length === 0) json = json1;//todo do better
-        else json = json.concat(json1);
-        let header = request.getResponseHeader("link");
-        cont = hasNextPage(header);
-    }
-
-    // for each issue, get user who closed it (from issue events)
-    const out = new Map();
-    const num = json[0]['number'] // todo get all pages; then for i < num
-    for (let i = 0; i < 30; i++) {
-        let url = 'https://api.github.com/repos/' + repo + '/issues/' + i + '/events';
-        request.open('GET', url, false);
-        request.setRequestHeader('Authorization', 'token ' + token);
-        request.send();
-        json = JSON.parse(request.responseText);
-        for (let i = 0; i < json.length; i++) {
-            const author = json[i]['actor']['login'];
-            if (!out.has(author)) out.set(author, 1);
-            else out.set(author, out.get(author) + 1);
-        }
-    }
+    const out = forEachPage(repo, token, f);
 
     out.forEach((value, key)=>
         document.write('author: ' + key + ', nIssuesResolved: ' + value + '\n'));
@@ -99,6 +69,39 @@ function hasNextPage(header) {
     }
 }
 
-function forEachPage(url, f) {
+function forEachPage(repo, token, f) {
+    // get issues
+    let cont = true;
+    let out = new Map();
+    const request = new XMLHttpRequest();
+    for (let i = 0; cont; i++) {
+        console.log("Pinging page " + i);
+        let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed&page=' + i;
+        request.open('GET', url, false);
+        request.setRequestHeader('Authorization', 'token ' + token);
+        request.send();
+        let json = JSON.parse(request.responseText);
+        out = f(repo, token, json, out);//todo ?
+        let header = request.getResponseHeader("link");
+        cont = hasNextPage(header);
+    }
+    return out;
+}
 
+function f(repo, token, json, out) {
+    // for each issue, get user who closed it (from issue events)
+    const request = new XMLHttpRequest();
+    for (let i = 0; i < json.length; i++) {
+        const num = json[i]['number'];
+        console.log("Pinging issue event " + i);
+        let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
+        request.open('GET', url, false);
+        request.setRequestHeader('Authorization', 'token ' + token);
+        request.send();
+        let eventJson = JSON.parse(request.responseText);
+        const author = eventJson[0]['actor']['login'];//todo might have multiple events; want to find event:closed
+        if (!out.has(author)) out.set(author, 1);
+        else out.set(author, out.get(author) + 1);
+    }
+    return out;
 }
