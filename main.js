@@ -57,12 +57,20 @@ function getNIssuesResolvedByAuthor() {
     }
 
     // get issues
-    let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
+    let cont = true;
+    let json = [];
     const request = new XMLHttpRequest();
-    request.open('GET', url, false);
-    request.setRequestHeader('Authorization', 'token ' + token);
-    request.send();
-    let json = JSON.parse(request.responseText);
+    for (let i = 0; cont; i++) {
+        let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed&page=' + i;
+        request.open('GET', url, false);
+        request.setRequestHeader('Authorization', 'token ' + token);
+        request.send();
+        let json1 = JSON.parse(request.responseText);
+        if (json.length === 0) json = json1;//todo do better
+        else json = json.concat(json1);
+        let header = request.getResponseHeader("link");
+        cont = hasNextPage(header);
+    }
 
     // for each issue, get user who closed it (from issue events)
     const out = new Map();
@@ -83,4 +91,14 @@ function getNIssuesResolvedByAuthor() {
     out.forEach((value, key)=>
         document.write('author: ' + key + ', nIssuesResolved: ' + value + '\n'));
     return true;
+}
+
+function hasNextPage(header) {
+    if (header) {
+        return header.indexOf('>; rel="next"') !== -1;
+    }
+}
+
+function forEachPage(url, f) {
+
 }
