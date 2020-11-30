@@ -1,4 +1,4 @@
-//todo exception handling
+//todo other json parsing error handling
 
 const MAX_PAGES = 10; //todo
 
@@ -23,6 +23,7 @@ function getUserRepoInfo() {
 }
 
 function getNCommitsByAuthor() {
+    console.log('Getting n commits by author');
     const repo = document.getElementById('repoCommits').value;
     const token = document.getElementById('tokenCommits').value;
     if (repo === '' || token === '') {
@@ -47,6 +48,7 @@ function getNCommitsByAuthor() {
 }
 
 function getNIssuesResolvedByAuthor() {
+    console.log('Getting n issues resolved by author');
     const repo = document.getElementById('repoIssues').value;
     const token = document.getElementById('tokenIssues').value;
     if (repo === '' || token === '') {
@@ -57,13 +59,18 @@ function getNIssuesResolvedByAuthor() {
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
     const out = forEachPage(url, token, (jsonPage,out)=>{
         if (out === undefined) out = new Map();
+        let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
-            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
             console.log("Pinging issue " + num);
-            let jsonEvent = sendHTTPRequest('GET',url, token);
+            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
+            let jsonEvent = sendHTTPRequest('GET',url, token,null,request);
 
-            const author = jsonEvent[0]['actor']['login'];//todo might have multiple events; want to find event:closed
+            const closedEvent = jsonEvent.find(e=>e['event']==="closed");
+            const actor = closedEvent['actor'];
+            let author;
+            if (actor === null) author = "null";
+            else author = actor['login'];
             if (!out.has(author)) out.set(author, 1);
             else out.set(author, out.get(author) + 1);
         }
@@ -75,38 +82,33 @@ function getNIssuesResolvedByAuthor() {
     return true;
 }
 
-//--todo--
-
-function sendHTTPRequest(type, url, token) {
-    const request = new XMLHttpRequest();
+function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
+    if (request === undefined) request = new XMLHttpRequest();
     request.open(type, url, false);
     request.setRequestHeader('Authorization', 'token ' + token);
-    //todo optional parameters
-    request.send();
+    request.send(body);
+    //todo exception handling
     return JSON.parse(request.responseText);
 }
 
-/** todo name;description
- * Queries the GitHub API at the given url with the given token,
- * and performs the function f on this data.
- * This query will return data across multiple pages, so these
- * are looped through and f is performed for each.
+/**
+ * Performs the function f for each page of a GitHub API query
  * The output 'out' is a user-defined data type,
- * and its use in f should be instantiated it if it hasn't already been,
- * otherwise add to the existing 'out' .
- * f is of the form out = f(page, out).
- * @param url url to query GitHub API with
+ * which should be instantiated and added to by the user in f.
+ * @param url url to query GitHub API
  * @param token GitHub token for query
- * @param f function to be performed on data returned from the query
- * @returns user-defined data
+ * @param f (page,out) function to be performed on data returned from the query
+ * @returns user's data
  */
 function forEachPage(url, token, f) {
+    if (!url.includes("?")) url = url.concat("?per_page=50");
+    else url = url.concat("&per_page=50");
     let cont = true;
     let out;
     const request = new XMLHttpRequest();
     for (let i = 1; cont && i < MAX_PAGES; i++) {
         console.log("Pinging page " + i);
-        let page = sendHTTPRequest('GET', url, token);
+        let page = sendHTTPRequest('GET',url,token,null,request);
 
         out = f(page, out);
 
@@ -117,12 +119,28 @@ function forEachPage(url, token, f) {
     return out;
 }
 
+/**
+ * Parses the header to get the url of the next page if it exists
+ * @param header header of current page
+ * @returns {string|null} url of next page if it exists, otherwise null
+ */
 function getNextPage(header) {
     if (header) {
-        let next = header.split('>; rel="next"');
-        if (next === -1) return null; // if no next page
-        return next[0].split("<")[1];
+        if (!header.includes('rel="next"')) return null;
+        const map = parseHeader(header);
+        return map.get('next');
     }
     return null;
 }
 
+function parseHeader(header) {
+    let pages = header.split(', ');
+    let pageMap = new Map();
+    pages.forEach(page=>{
+        let pair = page.split("; ");
+        let url = pair[0].split('<')[1].split('>')[0];
+        let key = pair[1].split('rel="')[1].split('"')[0];
+        pageMap.set(key, url);
+    });
+    return pageMap;
+}
