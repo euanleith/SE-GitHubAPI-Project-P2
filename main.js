@@ -1,3 +1,7 @@
+//todo exception handling
+
+const MAX_PAGES = 10; //todo
+
 function getUserRepoInfo() {
     const username = document.getElementById('username').value;
     const repo = document.getElementById('repo').value;
@@ -7,17 +11,14 @@ function getUserRepoInfo() {
         return false;
     }
 
-    var url;
+    let url;
     if (repo === '')
         url = 'https://api.github.com/users/' + username; // get user
     else
         url = 'https://api.github.com/repos/' + username + '/' + repo; // get repo
 
-    const request = new XMLHttpRequest();
-    request.open('GET', url, false);
-    request.setRequestHeader('Authorization', 'token ' + token);
-    request.send();
-    document.write(request.responseText);
+    let json = sendHTTPRequest('GET',url,token);
+    document.write(json);
     return true;
 }
 
@@ -29,22 +30,19 @@ function getNCommitsByAuthor() {
         return false;
     }
 
-    const url = 'https://api.github.com/repos/' + repo + '/commits';
-    const request = new XMLHttpRequest();
-    request.open('GET', url, false);
-    request.setRequestHeader('Authorization', 'token ' + token);
-    request.send();
-    const json = JSON.parse(request.responseText);
-
-    const out = new Map();
-    for (let i = 0; i < json.length; i++) {
-        const author = json[i]['commit']['author']['name'];
-        if (!out.has(author)) out.set(author, 1);
-        else out.set(author, out.get(author)+1);
-    }
+    let url = 'https://api.github.com/repos/' + repo + '/commits';
+    let out = forEachPage(url, token, (jsonPage,out)=>{
+        if (out === undefined) out = new Map();
+        for (let i = 0; i < jsonPage.length; i++) {
+            const author = jsonPage[i]['committer']['login'];
+            if (!out.has(author)) out.set(author, 1);
+            else out.set(author, out.get(author)+1);
+        }
+        return out;
+    });
 
     out.forEach((value, key)=>
-        document.write('author: ' + key + ', nCommits: ' + value + '\n'));
+        document.write('author: ' + key + ', nCommits: ' + value + '<br>'));
     return true;
 }
 
@@ -56,52 +54,75 @@ function getNIssuesResolvedByAuthor() {
         return false;
     }
 
-    const out = forEachPage(repo, token, f);
+    let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
+    const out = forEachPage(url, token, (jsonPage,out)=>{
+        if (out === undefined) out = new Map();
+        for (let i = 0; i < jsonPage.length; i++) {
+            const num = jsonPage[i]['number'];
+            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
+            console.log("Pinging issue " + num);
+            let jsonEvent = sendHTTPRequest('GET',url, token);
+
+            const author = jsonEvent[0]['actor']['login'];//todo might have multiple events; want to find event:closed
+            if (!out.has(author)) out.set(author, 1);
+            else out.set(author, out.get(author) + 1);
+        }
+        return out;
+    });
 
     out.forEach((value, key)=>
-        document.write('author: ' + key + ', nIssuesResolved: ' + value + '\n'));
+        document.write('author: ' + key + ', nIssuesResolved: ' + value + '<br>'));
     return true;
 }
 
-function hasNextPage(header) {
-    if (header) {
-        return header.indexOf('>; rel="next"') !== -1;
-    }
+//--todo--
+
+function sendHTTPRequest(type, url, token) {
+    const request = new XMLHttpRequest();
+    request.open(type, url, false);
+    request.setRequestHeader('Authorization', 'token ' + token);
+    //todo optional parameters
+    request.send();
+    return JSON.parse(request.responseText);
 }
 
-function forEachPage(repo, token, f) {
-    // get issues
+/** todo name;description
+ * Queries the GitHub API at the given url with the given token,
+ * and performs the function f on this data.
+ * This query will return data across multiple pages, so these
+ * are looped through and f is performed for each.
+ * The output 'out' is a user-defined data type,
+ * and its use in f should be instantiated it if it hasn't already been,
+ * otherwise add to the existing 'out' .
+ * f is of the form out = f(page, out).
+ * @param url url to query GitHub API with
+ * @param token GitHub token for query
+ * @param f function to be performed on data returned from the query
+ * @returns user-defined data
+ */
+function forEachPage(url, token, f) {
     let cont = true;
-    let out = new Map();
+    let out;
     const request = new XMLHttpRequest();
-    for (let i = 0; cont; i++) {
+    for (let i = 1; cont && i < MAX_PAGES; i++) {
         console.log("Pinging page " + i);
-        let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed&page=' + i;
-        request.open('GET', url, false);
-        request.setRequestHeader('Authorization', 'token ' + token);
-        request.send();
-        let json = JSON.parse(request.responseText);
-        out = f(repo, token, json, out);//todo ?
+        let page = sendHTTPRequest('GET', url, token);
+
+        out = f(page, out);
+
         let header = request.getResponseHeader("link");
-        cont = hasNextPage(header);
+        url = getNextPage(header);
+        if (!url) cont = false;
     }
     return out;
 }
 
-function f(repo, token, json, out) {
-    // for each issue, get user who closed it (from issue events)
-    const request = new XMLHttpRequest();
-    for (let i = 0; i < json.length; i++) {
-        const num = json[i]['number'];
-        console.log("Pinging issue event " + i);
-        let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
-        request.open('GET', url, false);
-        request.setRequestHeader('Authorization', 'token ' + token);
-        request.send();
-        let eventJson = JSON.parse(request.responseText);
-        const author = eventJson[0]['actor']['login'];//todo might have multiple events; want to find event:closed
-        if (!out.has(author)) out.set(author, 1);
-        else out.set(author, out.get(author) + 1);
+function getNextPage(header) {
+    if (header) {
+        let next = header.split('>; rel="next"');
+        if (next === -1) return null; // if no next page
+        return next[0].split("<")[1];
     }
-    return out;
+    return null;
 }
+
