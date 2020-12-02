@@ -30,5 +30,13 @@
         OAuth token*: <input type="text" id="tokenIssues" value="" required="required"><br>
         <input type="button" onclick="getNIssuesResolvedByAuthor()" value="Submit">
     </form>
+
+    <p>Get the number of pull requests reviewed by author for a repo:</p>
+
+    <form id="repoPullRequestsForm">
+        Repository*: <input type="text" id="repoPullRequests" value="" required="required"><br>
+        OAuth token*: <input type="text" id="tokenPullRequests" value="" required="required"><br>
+        <input type="button" onclick="getNPullRequestsReviewedByAuthor()" value="Submit">
+    </form>
 </body>
 </html>

@@ -1,4 +1,4 @@
-//todo other json parsing error handling
+//todo json parsing error handling
 
 const MAX_PAGES = 10; //todo
 
@@ -58,12 +58,12 @@ function getNIssuesResolvedByAuthor() {
 
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
     const out = forEachPage(url, token, (jsonPage,out)=>{
-        if (out === undefined) out = new Map();
+        if (out === undefined) out = new Map();//todo could put this before function?
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
             console.log("Pinging issue " + num);
-            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
+            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';//todo might need to do this for each page?
             let jsonEvent = sendHTTPRequest('GET',url, token,null,request);
 
             const closedEvent = jsonEvent.find(e=>e['event']==="closed");
@@ -79,6 +79,40 @@ function getNIssuesResolvedByAuthor() {
 
     out.forEach((value, key)=>
         document.write('author: ' + key + ', nIssuesResolved: ' + value + '<br>'));
+    return true;
+}
+
+//todo could generalise these
+function getNPullRequestsReviewedByAuthor() {
+    console.log('Getting n pull requests reviewed by author');
+    const repo = document.getElementById('repoPullRequests').value;
+    const token = document.getElementById('tokenPullRequests').value;
+    if (repo === '' || token === '') {
+        alert("repo/token not entered")
+        return false;
+    }
+
+    let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
+    const out = forEachPage(url, token, (jsonPage,out)=> {
+        if (out === undefined) out = new Map();
+        let request = new XMLHttpRequest();
+        for (let i = 0; i < jsonPage.length; i++) {
+            const num = jsonPage[i]['number'];
+            console.log("Pinging pull request " + num);
+            let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';//todo might need to do this for each page?
+            let jsonReviews = sendHTTPRequest('GET', url, token, null, request);
+
+            jsonReviews.forEach(review => {
+                let author = review['user']['login'];
+                if (!out.has(author)) out.set(author, 1);
+                else out.set(author, out.get(author) + 1);
+            });
+        }
+        return out;
+    });
+
+    out.forEach((value, key)=>
+        document.write('author: ' + key + ', nPullRequestsReviewed ' + value + '<br>'));
     return true;
 }
 
