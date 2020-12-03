@@ -2,37 +2,10 @@
 
 const MAX_PAGES = 10; //todo
 
-function getUserRepoInfo() {
-    const username = document.getElementById('username').value;
-    const repo = document.getElementById('repo').value;
-    const token = document.getElementById('token').value;
-    if (username === '' || token === '') {
-        alert("user/token not entered")
-        return false;
-    }
-
-    let url;
-    if (repo === '')
-        url = 'https://api.github.com/users/' + username; // get user
-    else
-        url = 'https://api.github.com/repos/' + username + '/' + repo; // get repo
-
-    let json = sendHTTPRequest('GET',url,token);
-    document.write(json);
-    return true;
-}
-
-function getNCommitsByAuthor() {
-    console.log('Getting n commits by author');
-    const repo = document.getElementById('repoCommits').value;
-    const token = document.getElementById('tokenCommits').value;
-    if (repo === '' || token === '') {
-        alert("repo/token not entered")
-        return false;
-    }
-
+function getNCommitsByAuthor(repo, token) {
+    console.log('getting n commits by author');
     let url = 'https://api.github.com/repos/' + repo + '/commits';
-    let out = forEachPage(url, token, (jsonPage,out)=>{
+    return forEachPage(url, token, (jsonPage,out)=>{
         if (out === undefined) out = new Map();
         for (let i = 0; i < jsonPage.length; i++) {
             const author = jsonPage[i]['committer']['login'];
@@ -41,28 +14,17 @@ function getNCommitsByAuthor() {
         }
         return out;
     });
-
-    out.forEach((value, key)=>
-        document.write('author: ' + key + ', nCommits: ' + value + '<br>'));
-    return true;
 }
 
-function getNIssuesResolvedByAuthor() {
-    console.log('Getting n issues resolved by author');
-    const repo = document.getElementById('repoIssues').value;
-    const token = document.getElementById('tokenIssues').value;
-    if (repo === '' || token === '') {
-        alert("repo/token not entered")
-        return false;
-    }
-
+function getNIssuesResolvedByAuthor(repo, token) {
+    console.log('getting n issues resolved by author');
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
-    const out = forEachPage(url, token, (jsonPage,out)=>{
+    return  forEachPage(url, token, (jsonPage,out)=>{
         if (out === undefined) out = new Map();//todo could put this before function?
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
-            console.log("Pinging issue " + num);
+            console.log("pinging issue " + num);
             let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';//todo might need to do this for each page?
             let jsonEvent = sendHTTPRequest('GET',url, token,null,request);
 
@@ -76,29 +38,17 @@ function getNIssuesResolvedByAuthor() {
         }
         return out;
     });
-
-    out.forEach((value, key)=>
-        document.write('author: ' + key + ', nIssuesResolved: ' + value + '<br>'));
-    return true;
 }
 
-//todo could generalise these
-function getNPullRequestsReviewedByAuthor() {
-    console.log('Getting n pull requests reviewed by author');
-    const repo = document.getElementById('repoPullRequests').value;
-    const token = document.getElementById('tokenPullRequests').value;
-    if (repo === '' || token === '') {
-        alert("repo/token not entered")
-        return false;
-    }
-
+function getNPullRequestsReviewedByAuthor(repo, token) {
+    console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
-    const out = forEachPage(url, token, (jsonPage,out)=> {
+    return forEachPage(url, token, (jsonPage,out)=> {
         if (out === undefined) out = new Map();
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
-            console.log("Pinging pull request " + num);
+            console.log("pinging pull request " + num);
             let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';//todo might need to do this for each page?
             let jsonReviews = sendHTTPRequest('GET', url, token, null, request);
 
@@ -110,10 +60,6 @@ function getNPullRequestsReviewedByAuthor() {
         }
         return out;
     });
-
-    out.forEach((value, key)=>
-        document.write('author: ' + key + ', nPullRequestsReviewed ' + value + '<br>'));
-    return true;
 }
 
 function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
@@ -141,7 +87,7 @@ function forEachPage(url, token, f) {
     let out;
     const request = new XMLHttpRequest();
     for (let i = 1; cont && i < MAX_PAGES; i++) {
-        console.log("Pinging page " + i);
+        console.log("pinging page " + i);
         let page = sendHTTPRequest('GET',url,token,null,request);
 
         out = f(page, out);
@@ -177,4 +123,40 @@ function parseHeader(header) {
         pageMap.set(key, url);
     });
     return pageMap;
+}
+
+function chart() {
+    const repo = document.getElementById('repo').value;
+    const token = document.getElementById('token').value;
+    if (repo === '' || token === '') {
+        alert("repo/token not entered")
+        return false;
+    }
+
+    document.getElementById("loader").style.visibility="visible";
+
+    sleep(100).then(() => //todo remove?
+        getData(repo, token).then(({commits, issues, pullRequests}) => {
+            console.log("done");
+
+            document.getElementById("loader").style.visibility="hidden";
+
+            let keys = Object.keys(commits);
+            keys.forEach(a=>document.write(a+' '+keys[a]));
+            keys = Object.keys(issues);
+            keys.forEach(a=>document.write(a+' '+keys[a]));
+            keys = Object.keys(pullRequests);
+            keys.forEach(a=>document.write(a+' '+keys[a]));
+    }));
+}
+
+function sleep (time) {
+    return new Promise((resolve) => setTimeout(resolve, time));
+}
+
+async function getData(repo, token) {
+    const commits = getNCommitsByAuthor(repo, token);
+    const issues = getNIssuesResolvedByAuthor(repo, token);
+    const pullRequests = getNPullRequestsReviewedByAuthor(repo, token);
+    return {'commits': commits, 'issues': issues, 'pullRequests': pullRequests};
 }
