@@ -32,7 +32,7 @@ function getNIssuesResolvedByAuthor(repo, token, data) {
             let author;
             if (actor === null) author = "null";
             else author = actor['login'];
-            if (!data.has(author)) data.set(author, {commits:0, issues:1});//todo don't want to have commits here
+            if (!data.has(author)) data.set(author, {issues:1});//todo don't want to have commits here
             else if(!data.get(author).issues)  data.get(author).issues=1;
             else data.get(author).issues++;
         }
@@ -54,7 +54,7 @@ function getNPullRequestsReviewedByAuthor(repo, token, data) {
 
             jsonReviews.forEach(review => {
                 let author = review['user']['login'];
-                if (!data.has(author)) data.set(author, {commits:0,issues:0,pullRequests:1});//todo
+                if (!data.has(author)) data.set(author, {pullRequests:1});//todo
                 else if (!data.get(author).pullRequests) data.pullRequests=1;
                 else data.get(author).pullRequests++;
             });
@@ -141,12 +141,6 @@ function chart() {
             document.getElementById("loader").style.visibility="hidden";
 
             display(data);
-            let keys = Object.keys(commits);
-            keys.forEach(a=>document.write(a+' '+keys[a]));
-            keys = Object.keys(issues);
-            keys.forEach(a=>document.write(a+' '+keys[a]));
-            keys = Object.keys(pullRequests);
-            keys.forEach(a=>document.write(a+' '+keys[a]));
     }));
 }
 
@@ -160,10 +154,14 @@ async function getData(repo, token) {
     data = getNCommitsByAuthor(repo, token, data);
     data = getNIssuesResolvedByAuthor(repo, token, data);
     data = getNPullRequestsReviewedByAuthor(repo, token, data);
+    data.forEach((v)=>{
+        if (!v.commits) v.commits=0;
+        if (!v.issues) v.issues=0;
+        if (!v.pullRequests) v.pullRequests=0;
+    });
     return data
 }
 
-//todo error where there aren't any commits/issues/pullRequests
 function display(data) {
     const baseWidth = 100;
     const xScale = d3.scaleLinear().domain([0, 20]).range([0, baseWidth]);
