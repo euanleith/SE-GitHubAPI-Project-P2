@@ -2,25 +2,24 @@
 
 const MAX_PAGES = 10; //todo
 
-function getNCommitsByAuthor(repo, token) {
+function getNCommitsByAuthor(repo, token, data) {
     console.log('getting n commits by author');
     let url = 'https://api.github.com/repos/' + repo + '/commits';
-    return forEachPage(url, token, (jsonPage,out)=>{
-        if (out === undefined) out = new Map();
+    forEachPage(url, token, (jsonPage)=>{
         for (let i = 0; i < jsonPage.length; i++) {
             const author = jsonPage[i]['committer']['login'];
-            if (!out.has(author)) out.set(author, 1);
-            else out.set(author, out.get(author)+1);
+            if (!data.has(author)) data.set(author, {commits:1});
+            else if (!data.get(author).commits) data.get(author).commits=1;
+            else data.get(author).commits++;
         }
-        return out;
     });
+    return data;
 }
 
-function getNIssuesResolvedByAuthor(repo, token) {
+function getNIssuesResolvedByAuthor(repo, token, data) {
     console.log('getting n issues resolved by author');
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
-    return  forEachPage(url, token, (jsonPage,out)=>{
-        if (out === undefined) out = new Map();//todo could put this before function?
+    forEachPage(url, token, (jsonPage)=>{
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
@@ -33,18 +32,19 @@ function getNIssuesResolvedByAuthor(repo, token) {
             let author;
             if (actor === null) author = "null";
             else author = actor['login'];
-            if (!out.has(author)) out.set(author, 1);
-            else out.set(author, out.get(author) + 1);
+            if (!data.has(author)) data.set(author, {commits:0, issues:1});//todo don't want to have commits here
+            else if(!data.get(author).issues)  data.get(author).issues=1;
+            else data.get(author).issues++;
         }
-        return out;
     });
+    return data;
 }
 
-function getNPullRequestsReviewedByAuthor(repo, token) {
+function getNPullRequestsReviewedByAuthor(repo, token, data) {
     console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
-    return forEachPage(url, token, (jsonPage,out)=> {
-        if (out === undefined) out = new Map();
+    forEachPage(url, token, (jsonPage)=> {
+        let t = data;
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
@@ -54,12 +54,13 @@ function getNPullRequestsReviewedByAuthor(repo, token) {
 
             jsonReviews.forEach(review => {
                 let author = review['user']['login'];
-                if (!out.has(author)) out.set(author, 1);
-                else out.set(author, out.get(author) + 1);
+                if (!data.has(author)) data.set(author, {commits:0,issues:0,pullRequests:1});//todo
+                else if (!data.get(author).pullRequests) data.pullRequests=1;
+                else data.get(author).pullRequests++;
             });
         }
-        return out;
     });
+    return data;
 }
 
 function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
@@ -84,19 +85,17 @@ function forEachPage(url, token, f) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
     else url = url.concat("&per_page=50");
     let cont = true;
-    let out;
     const request = new XMLHttpRequest();
     for (let i = 1; cont && i < MAX_PAGES; i++) {
         console.log("pinging page " + i);
         let page = sendHTTPRequest('GET',url,token,null,request);
 
-        out = f(page, out);
+        f(page);
 
         let header = request.getResponseHeader("link");
         url = getNextPage(header);
         if (!url) cont = false;
     }
-    return out;
 }
 
 /**
@@ -136,11 +135,12 @@ function chart() {
     document.getElementById("loader").style.visibility="visible";
 
     sleep(100).then(() => //todo remove?
-        getData(repo, token).then(({commits, issues, pullRequests}) => {
+        getData(repo, token).then((data) => {
             console.log("done");
 
             document.getElementById("loader").style.visibility="hidden";
 
+            display(data);
             let keys = Object.keys(commits);
             keys.forEach(a=>document.write(a+' '+keys[a]));
             keys = Object.keys(issues);
@@ -150,13 +150,62 @@ function chart() {
     }));
 }
 
-function sleep (time) {
+function sleep (time) {//todo just use setTimeout
     return new Promise((resolve) => setTimeout(resolve, time));
 }
 
+//todo name
 async function getData(repo, token) {
-    const commits = getNCommitsByAuthor(repo, token);
-    const issues = getNIssuesResolvedByAuthor(repo, token);
-    const pullRequests = getNPullRequestsReviewedByAuthor(repo, token);
-    return {'commits': commits, 'issues': issues, 'pullRequests': pullRequests};
+    let data = new Map();
+    data = getNCommitsByAuthor(repo, token, data);
+    data = getNIssuesResolvedByAuthor(repo, token, data);
+    data = getNPullRequestsReviewedByAuthor(repo, token, data);
+    return data
+}
+
+//todo error where there aren't any commits/issues/pullRequests
+function display(data) {
+    const baseWidth = 100;
+    const xScale = d3.scaleLinear().domain([0, 20]).range([0, baseWidth]);
+
+    d3.select("#date-column")
+        .selectAll("p")
+        .data(Array.from(data.keys()))
+        .enter()
+        .append("p")
+        .classed("date-text", true)
+        .text(d => d);
+
+    d3.select("#first-bar-column")
+        .selectAll("div")
+        .data(Array.from(data.keys()))
+        .enter()
+        .append("div")
+        .style("width", d => `${xScale(+data.get(d).commits)}px`)
+        .classed("first-bar", true)
+        .append("p")
+        .classed("label", true)
+        .text(d => data.get(d).commits);
+
+    d3.select("#second-bar-column")
+        .selectAll("div")
+        .data(Array.from(data.keys()))
+        .enter()
+        .append("div")
+        .style("width", d => `${xScale(+data.get(d).issues)}px`)
+        .classed("second-bar", true)
+        .append("p")
+        .classed("label", true)
+        .text(d => data.get(d).issues);
+
+    d3.select("#third-bar-column")
+        .selectAll("div")
+        .data(Array.from(data.keys()))
+        .enter()
+        .append("div")
+        .style("width", d => `${xScale(+data.get(d).pullRequests)}px`)
+        .classed("third-bar", true)
+        .append("p")
+        .classed("label", true)
+        .text(d => data.get(d).pullRequests);
 }
