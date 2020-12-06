@@ -170,24 +170,26 @@ function max(values) {
 }
 
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
+//todo text black and append on end if can't fit in bar, otherwise make white and inside bar
 function display(data) {
-    const dataTypes = ['author','commits','issues','pull requests']
+
+    const dataTypes = ['Author','No. commits','No. issues resolved',' No. pull requests reviewed']
     const maxInput = max(data.values());
     const authors = Array.from(data.keys());
 
-    const length = 150;
+    const width = 190;
     const height = 20;
     const margin = 5;
     const xScale = d3.scaleLinear()
         .domain([0, maxInput])
-        .range([0, length-margin]);
+        .range([0, width-margin]);
 
     d3.select("#data-type-column")
         .selectAll("p")
         .data(dataTypes)
         .enter()
         .append("p")
-        .style("width", () => `${length-(2*margin)}px`)
+        .style("width", () => `${width-(2*margin)}px`)
         .style("margin", () => `${margin}px`)
         .style("height", () => `${height}px`)
         .classed("data-type-text", true)
@@ -198,48 +200,60 @@ function display(data) {
         .data(authors)
         .enter()
         .append("p")
-        .style("width", () => `${length-(2*margin)}px`)
+        .style("width", () => `${width-(2*margin)}px`)
         .style("margin", () => `${margin}px`)
         .style("height", () => `${height}px`)
         .classed("author-text", true)
         .text(d => d);
 
     d3.select("#commit-bar-column")
+        .style("width", () => `${width}px`)
         .selectAll("div")
         .data(authors)
         .enter()
+        .append("div")
+        .style("width", () => `${width-margin}px`)
+        .style("margin", () => `${margin}px`)
+        .classed("background",true)
         .append("div")
         .style("width", d => `${xScale(data.get(d).commits)}px`)
-        .style("margin", () => `${margin}px`)
-        .style("height", () => `${height}px`)
         .classed("commit-bar", true)
         .append("p")
-        .classed("label", true)
-        .text(d => data.get(d).commits);
+        .style("margin-left", () => `${margin}px`)
+        .text(d => data.get(d).commits)
+        .classed("label", true);
 
     d3.select("#issue-bar-column")
+        .style("width", () => `${width}px`)
         .selectAll("div")
         .data(authors)
         .enter()
+        .append("div")
+        .style("width", () => `${width-margin}px`)
+        .style("margin", () => `${margin}px`)
+        .classed("background",true)
         .append("div")
         .style("width", d => `${xScale(data.get(d).issues)}px`)
-        .style("margin", () => `${margin}px`)
-        .style("height", () => `${height}px`)
         .classed("issue-bar", true)
         .append("p")
-        .classed("label", true)
-        .text(d => data.get(d).issues);
+        .style("margin-left", () => `${margin}px`)
+        .text(d => data.get(d).issues)
+        .classed("label", true);
 
     d3.select("#pull-request-bar-column")
+        .style("width", () => `${width}px`)
         .selectAll("div")
         .data(authors)
         .enter()
         .append("div")
-        .style("width", d => `${xScale(data.get(d).pullRequests)}px`)
+        .style("width", () => `${width-margin}px`)
         .style("margin", () => `${margin}px`)
-        .style("height", () => `${height}px`)
+        .classed("background",true)
+        .append("div")
+        .style("width", d => `${xScale(data.get(d).pullRequests)}px`)
         .classed("pull-request-bar", true)
         .append("p")
-        .classed("label", true)
-        .text(d => data.get(d).pullRequests);
+        .style("margin-left", () => `${margin}px`)
+        .text(d => data.get(d).pullRequests)
+        .classed("label", true);
 }

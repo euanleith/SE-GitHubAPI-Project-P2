@@ -29,12 +29,18 @@
     flex-direction: column;
 }
 
-.bar {
-    width: 150px;
-}
-
 .label {
     display: inline;
+}
+
+.inner {
+    position: absolute;
+}
+
+.background {
+    display: inline-block;
+    background-color: #f3f3f3;
+    background-clip: content-box;
 }
 
 .commit-bar {
