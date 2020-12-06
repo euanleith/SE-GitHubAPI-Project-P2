@@ -32,7 +32,7 @@ function getNIssuesResolvedByAuthor(repo, token, data) {
             let author;
             if (actor === null) author = "null";
             else author = actor['login'];
-            if (!data.has(author)) data.set(author, {issues:1});//todo don't want to have commits here
+            if (!data.has(author)) data.set(author, {issues:1});
             else if(!data.get(author).issues)  data.get(author).issues=1;
             else data.get(author).issues++;
         }
@@ -44,7 +44,6 @@ function getNPullRequestsReviewedByAuthor(repo, token, data) {
     console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
     forEachPage(url, token, (jsonPage)=> {
-        let t = data;
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
@@ -54,7 +53,7 @@ function getNPullRequestsReviewedByAuthor(repo, token, data) {
 
             jsonReviews.forEach(review => {
                 let author = review['user']['login'];
-                if (!data.has(author)) data.set(author, {pullRequests:1});//todo
+                if (!data.has(author)) data.set(author, {pullRequests:1});
                 else if (!data.get(author).pullRequests) data.pullRequests=1;
                 else data.get(author).pullRequests++;
             });
@@ -74,12 +73,9 @@ function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
 
 /**
  * Performs the function f for each page of a GitHub API query
- * The output 'out' is a user-defined data type,
- * which should be instantiated and added to by the user in f.
  * @param url url to query GitHub API
  * @param token GitHub token for query
- * @param f (page,out) function to be performed on data returned from the query
- * @returns user's data
+ * @param f (page) function to be performed on data returned from the query
  */
 function forEachPage(url, token, f) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
@@ -134,21 +130,18 @@ function chart() {
 
     document.getElementById("loader").style.visibility="visible";
 
-    sleep(100).then(() => //todo remove?
-        getData(repo, token).then((data) => {
-            console.log("done");
+    setTimeout(()=>
+        getData(repo, token)
+            .then((data) => {
+                console.log("done");
 
-            document.getElementById("loader").style.visibility="hidden";
+                document.getElementById("loader").style.visibility = "hidden";
 
-            display(data);
-    }));
+                display(data);
+            }),
+        100);
 }
 
-function sleep (time) {//todo just use setTimeout
-    return new Promise((resolve) => setTimeout(resolve, time));
-}
-
-//todo name
 async function getData(repo, token) {
     let data = new Map();
     data = getNCommitsByAuthor(repo, token, data);
@@ -162,47 +155,90 @@ async function getData(repo, token) {
     return data
 }
 
-function display(data) {
-    const baseWidth = 100;
-    const xScale = d3.scaleLinear().domain([0, 20]).range([0, baseWidth]);
+function avg(author) {
+    return author.commits + author.issues + author.pullRequests / 3;
+}
 
-    d3.select("#date-column")
+function max(values) {
+    let max = -1;
+    for (let v of values) {
+        max = Math.max(max,v.commits);
+        max = Math.max(max,v.issues);
+        max = Math.max(max,v.pullRequests);
+    }
+    return max;
+}
+
+//todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
+function display(data) {
+    const dataTypes = ['author','commits','issues','pull requests']
+    const maxInput = max(data.values());
+    const authors = Array.from(data.keys());
+
+    const length = 150;
+    const height = 20;
+    const margin = 5;
+    const xScale = d3.scaleLinear()
+        .domain([0, maxInput])
+        .range([0, length-margin]);
+
+    d3.select("#data-type-column")
         .selectAll("p")
-        .data(Array.from(data.keys()))
+        .data(dataTypes)
         .enter()
         .append("p")
-        .classed("date-text", true)
+        .style("width", () => `${length-(2*margin)}px`)
+        .style("margin", () => `${margin}px`)
+        .style("height", () => `${height}px`)
+        .classed("data-type-text", true)
         .text(d => d);
 
-    d3.select("#first-bar-column")
+    d3.select("#author-column")
+        .selectAll("p")
+        .data(authors)
+        .enter()
+        .append("p")
+        .style("width", () => `${length-(2*margin)}px`)
+        .style("margin", () => `${margin}px`)
+        .style("height", () => `${height}px`)
+        .classed("author-text", true)
+        .text(d => d);
+
+    d3.select("#commit-bar-column")
         .selectAll("div")
-        .data(Array.from(data.keys()))
+        .data(authors)
         .enter()
         .append("div")
-        .style("width", d => `${xScale(+data.get(d).commits)}px`)
-        .classed("first-bar", true)
+        .style("width", d => `${xScale(data.get(d).commits)}px`)
+        .style("margin", () => `${margin}px`)
+        .style("height", () => `${height}px`)
+        .classed("commit-bar", true)
         .append("p")
         .classed("label", true)
         .text(d => data.get(d).commits);
 
-    d3.select("#second-bar-column")
+    d3.select("#issue-bar-column")
         .selectAll("div")
-        .data(Array.from(data.keys()))
+        .data(authors)
         .enter()
         .append("div")
-        .style("width", d => `${xScale(+data.get(d).issues)}px`)
-        .classed("second-bar", true)
+        .style("width", d => `${xScale(data.get(d).issues)}px`)
+        .style("margin", () => `${margin}px`)
+        .style("height", () => `${height}px`)
+        .classed("issue-bar", true)
         .append("p")
         .classed("label", true)
         .text(d => data.get(d).issues);
 
-    d3.select("#third-bar-column")
+    d3.select("#pull-request-bar-column")
         .selectAll("div")
-        .data(Array.from(data.keys()))
+        .data(authors)
         .enter()
         .append("div")
-        .style("width", d => `${xScale(+data.get(d).pullRequests)}px`)
-        .classed("third-bar", true)
+        .style("width", d => `${xScale(data.get(d).pullRequests)}px`)
+        .style("margin", () => `${margin}px`)
+        .style("height", () => `${height}px`)
+        .classed("pull-request-bar", true)
         .append("p")
         .classed("label", true)
         .text(d => data.get(d).pullRequests);

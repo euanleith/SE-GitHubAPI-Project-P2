@@ -37,32 +37,20 @@
     display: inline;
 }
 
-.date-text {
-    height: 20px;
-    width: 75px;
-    margin: 5px;
-}
-
-.first-bar {
+.commit-bar {
     display: inline-block;
-    height: 20px;
-    margin: 5px;
     background-color: cadetblue;
     background-clip: content-box;
 }
 
-.second-bar {
+.issue-bar {
     display: inline-block;
-    height: 20px;
-    margin: 5px;
     background-color: cadetblue;
     background-clip: content-box;
 }
 
-.third-bar {
+.pull-request-bar {
     display: inline-block;
-    height: 20px;
-    margin: 5px;
     background-color: cadetblue;
     background-clip: content-box;
 }
