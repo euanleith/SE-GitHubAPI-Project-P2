@@ -109,16 +109,22 @@ function getNextPage(header) {
 }
 
 function parseHeader(header) {
-    let pages = header.split(', ');
-    let pageMap = new Map();
-    pages.forEach(page=>{
-        let pair = page.split("; ");
-        let url = pair[0].split('<')[1].split('>')[0];
-        let key = pair[1].split('rel="')[1].split('"')[0];
-        pageMap.set(key, url);
-    });
-    return pageMap;
+    try {
+        if (!header) return null;
+        let pages = header.split(', ');
+        let pageMap = new Map();
+        for (let page of pages) {
+            let pair = page.split("; ");
+            if (pair.length === 1) return null;
+            let url = pair[0].split('<')[1].split('>')[0];
+            let key = pair[1].split('rel="')[1].split('"')[0];
+            pageMap.set(key, url);
+        }
+        return pageMap;
+    } catch (e) {return null};
 }
+
+module.exports.parseHeader = parseHeader;//todo
 
 function chart() {
     const repo = document.getElementById('repo').value;
@@ -172,6 +178,9 @@ function max(values) {
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
 //todo text black and append on end if can't fit in bar, otherwise make white and inside bar
 function display(data) {
+    //data = new Map();
+    //data.set("SheetJSDev",{commits:54,issues:12,pullRequests:0});
+    //data.set("obj7",{commits:0,issues:1,pullRequests:0});
 
     const dataTypes = ['Author','No. commits','No. issues resolved',' No. pull requests reviewed']
     const maxInput = max(data.values());
