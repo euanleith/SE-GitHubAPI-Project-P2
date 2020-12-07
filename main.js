@@ -1,82 +1,73 @@
 //todo json parsing error handling
 
-//todo replace requests with fetch
-
 const MAX_PAGES = 10; //todo
 
-async function getNCommitsByAuthor(repo, token) {
+async function getNCommitsByAuthor(repo, token, data) {
     console.log('getting n commits by author');
-    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/commits';
     let promises = await queryEachPage(url, token);
-    promises.forEach(result=>{
-        let jsonPage = result.value;
-        for (let i = 0; i < jsonPage.length; i++) {
-            const author = jsonPage[i]['committer']['login'];
-            if (!data.has(author)) data.set(author, 1);
-            else data.set(author, data.get(author)+1);
+    for (const promise of promises) {
+        let text = promise.value;
+        for (let i = 0; i < text.length; i++) {
+            const author = text[i]['committer']['login'];
+            if (!data.has(author)) data.set(author, {commits:1});
+            else if (!data.get(author).commits) data.get(author).commits=1;
+            else data.get(author).commits++;
         }
-    });
+    }
     return data;
 }
 
-async function getNIssuesResolvedByAuthor(repo, token) {
+async function getNIssuesResolvedByAuthor(repo, token, data) {
     console.log('getting n issues resolved by author');
-    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
     let promises = await queryEachPage(url, token);
-    promises.forEach(result=>{
-        let jsonPage = result.value;
-        let request = new XMLHttpRequest();
-        for (let i = 0; i < jsonPage.length; i++) {
-            const num = jsonPage[i]['number'];
+    for (const promise of promises) {
+        let text = promise.value;
+        for (let i = 0; i < text.length; i++) {
+            const num = text[i]['number'];
             console.log("pinging issue " + num);
             let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';//todo might need to do this for each page?
-            let jsonEvent = sendHTTPRequest('GET',url, token,null,request);
-
-            const closedEvent = jsonEvent.find(e=>e['event']==="closed");
-            const actor = closedEvent['actor'];
-            let author;
-            if (actor === null) author = "null";
-            else author = actor['login'];
-            if (!data.has(author)) data.set(author, 1);
-            else data.set(author, data.get(author)+1);
+            let promisesEvents = await queryEachPage(url, token);
+            for (const promiseEvent of promisesEvents) {
+                let eventText = promiseEvent.value;
+                const closedEvent = eventText.find(e => e['event'] === "closed");
+                const actor = closedEvent['actor'];
+                let author;
+                if (actor === null) author = "null";
+                else author = actor['login'];
+                if (!data.has(author)) data.set(author, {issues:1});
+                else if(!data.get(author).issues)  data.get(author).issues=1;
+                else data.get(author).issues++;
+            }
         }
-    });
+    }
     return data;
 }
 
-async function getNPullRequestsReviewedByAuthor(repo, token) {
+async function getNPullRequestsReviewedByAuthor(repo, token, data) {
     console.log('getting n pull requests reviewed by author');
-    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
     let promises = await queryEachPage(url, token);
-    promises.forEach(result=>{
-        let jsonPage = result.value;
-        let request = new XMLHttpRequest();
-        for (let i = 0; i < jsonPage.length; i++) {
-            const num = jsonPage[i]['number'];
+    for (const promise of promises) {
+        let text = promise.value;
+        for (let i = 0; i < text.length; i++) {
+            const num = text[i]['number'];
             console.log("pinging pull request " + num);
-            let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';//todo might need to do this for each page?
-            let jsonReviews = sendHTTPRequest('GET', url, token, null, request);
-
-            jsonReviews.forEach(review => {
-                let author = review['user']['login'];
-                if (!data.has(author)) data.set(author, 1);
-                else data.set(author, data.get(author)+1);
-            });
+            let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';
+            let promiseReviewsPages = await queryEachPage(url, token);
+            for (const promiseReviews of promiseReviewsPages) {
+                const reviews = promiseReviews.value;
+                for (const review of reviews) {
+                    let author = review['user']['login'];
+                    if (!data.has(author)) data.set(author, {pullRequests:1});
+                    else if (!data.get(author).pullRequests) data.pullRequests=1;
+                    else data.get(author).pullRequests++;
+                }
+            }
         }
-    });
+    }
     return data;
-}
-
-function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
-    if (request === undefined) request = new XMLHttpRequest();
-    request.open(type, url, false);
-    request.setRequestHeader('Authorization', 'token ' + token);
-    request.send(body);
-    //todo exception handling
-    return JSON.parse(request.responseText);
 }
 
 /**
@@ -88,41 +79,29 @@ function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
 async function queryEachPage(url, token) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
     else url = url.concat("&per_page=50");
-    const request = new XMLHttpRequest();
-    request.open('GET', url, false);
-    request.setRequestHeader('Authorization', 'token ' + token);
-    request.send();
-    let header = request.getResponseHeader("link");
+    let header = await fetch(url, {
+        method: 'GET',
+        headers: {
+            Authorization: 'token ' + token
+        }
+    }).then(result=>result.headers.get('link'));
     const nPages = getNPages(header);
-    let promises = [];//todo linked list or something?
-
-    let i = 1;
-    for (; i <= nPages; i++) {
+    let promises = [];
+    let i;
+    for (i = 1; i <= nPages; i++) {
         console.log("pinging page " + i);
-
         let pageUrl = url + "&page=" + i;
         promises.push(fetch(pageUrl, {
             method: 'GET',
             headers: {
                 Authorization: 'token ' + token
             }
-        }).then(result=>result.json()));
+        }).then(result=>{
+            console.log('got response');//todo
+            return result.json()
+        }));
     }
     return Promise.allSettled(promises);
-}
-
-/**
- * Parses the header to get the url of the next page if it exists
- * @param header header of current page
- * @returns {string|null} url of next page if it exists, otherwise null
- */
-function getNextPage(header) {
-    if (header) {
-        if (!header.includes('rel="next"')) return null;
-        const map = parseHeader(header);
-        return map.get('next');
-    }
-    return null;
 }
 
 function getNPages(header) {
@@ -165,7 +144,7 @@ function chart() {
     document.getElementById("loader").style.visibility="visible";
 
     setTimeout(()=>
-        getData(repo, token, (data)=>{
+        getData(repo, token).then((data)=>{
                 console.log("done");
                 document.getElementById("loader").style.visibility = "hidden";
                 display(data);
@@ -173,38 +152,17 @@ function chart() {
         100);
 }
 
-function getData(repo, token, callback) {
-    let promises = [];
-    promises.push(getNCommitsByAuthor(repo, token));
-    promises.push(getNIssuesResolvedByAuthor(repo, token));
-    promises.push(getNPullRequestsReviewedByAuthor(repo, token));
-
-    Promise.allSettled(promises).then(results=>{
-        let maps = [];
-        results.forEach(promise=>maps.push(promise.value));
-        // get list of unique keys (authors)
-        let authors = {};
-        for (let map of maps) {
-            for (let author of map.keys()) {
-                if (!authors[author]) authors[author] = true;
-            }
-        }
-
-        // then for each add data
-        let data = new Map();
-        for (let author in authors) {
-            let d = {};
-            if (maps[0].has(author)) d.commits = maps[0].get(author);
-            else d.commits = 0;
-            if (maps[1].has(author)) d.issues = maps[1].get(author);
-            else d.issues = 0;
-            if (maps[1].has(author)) d.pullRequests = maps[1].get(author);
-            else d.pullRequests = 0;
-            data.set(author, d);
-        }
-
-        callback(data);//todo make promise instead?
+async function getData(repo, token) {
+    let data = new Map();
+    data = await getNCommitsByAuthor(repo, token, data);
+    data = await getNIssuesResolvedByAuthor(repo, token, data);
+    data = await getNPullRequestsReviewedByAuthor(repo, token, data);
+    data.forEach((v)=>{
+        if (!v.commits) v.commits=0;
+        if (!v.issues) v.issues=0;
+        if (!v.pullRequests) v.pullRequests=0;
     });
+    return data;
 }
 
 function avg(author) {
