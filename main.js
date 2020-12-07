@@ -1,25 +1,32 @@
 //todo json parsing error handling
 
+//todo replace requests with fetch
+
 const MAX_PAGES = 10; //todo
 
-function getNCommitsByAuthor(repo, token, data) {
+async function getNCommitsByAuthor(repo, token) {
     console.log('getting n commits by author');
+    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/commits';
-    forEachPage(url, token, (jsonPage)=>{
+    let promises = await queryEachPage(url, token);
+    promises.forEach(result=>{
+        let jsonPage = result.value;
         for (let i = 0; i < jsonPage.length; i++) {
             const author = jsonPage[i]['committer']['login'];
-            if (!data.has(author)) data.set(author, {commits:1});
-            else if (!data.get(author).commits) data.get(author).commits=1;
-            else data.get(author).commits++;
+            if (!data.has(author)) data.set(author, 1);
+            else data.set(author, data.get(author)+1);
         }
     });
     return data;
 }
 
-function getNIssuesResolvedByAuthor(repo, token, data) {
+async function getNIssuesResolvedByAuthor(repo, token) {
     console.log('getting n issues resolved by author');
+    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
-    forEachPage(url, token, (jsonPage)=>{
+    let promises = await queryEachPage(url, token);
+    promises.forEach(result=>{
+        let jsonPage = result.value;
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
@@ -32,18 +39,20 @@ function getNIssuesResolvedByAuthor(repo, token, data) {
             let author;
             if (actor === null) author = "null";
             else author = actor['login'];
-            if (!data.has(author)) data.set(author, {issues:1});
-            else if(!data.get(author).issues)  data.get(author).issues=1;
-            else data.get(author).issues++;
+            if (!data.has(author)) data.set(author, 1);
+            else data.set(author, data.get(author)+1);
         }
     });
     return data;
 }
 
-function getNPullRequestsReviewedByAuthor(repo, token, data) {
+async function getNPullRequestsReviewedByAuthor(repo, token) {
     console.log('getting n pull requests reviewed by author');
+    let data = new Map();
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
-    forEachPage(url, token, (jsonPage)=> {
+    let promises = await queryEachPage(url, token);
+    promises.forEach(result=>{
+        let jsonPage = result.value;
         let request = new XMLHttpRequest();
         for (let i = 0; i < jsonPage.length; i++) {
             const num = jsonPage[i]['number'];
@@ -53,9 +62,8 @@ function getNPullRequestsReviewedByAuthor(repo, token, data) {
 
             jsonReviews.forEach(review => {
                 let author = review['user']['login'];
-                if (!data.has(author)) data.set(author, {pullRequests:1});
-                else if (!data.get(author).pullRequests) data.pullRequests=1;
-                else data.get(author).pullRequests++;
+                if (!data.has(author)) data.set(author, 1);
+                else data.set(author, data.get(author)+1);
             });
         }
     });
@@ -72,26 +80,35 @@ function sendHTTPRequest(type, url, token, body=undefined, request=undefined) {
 }
 
 /**
- * Performs the function f for each page of a GitHub API query
+ * Returns the results for each page of a GitHub API query
  * @param url url to query GitHub API
  * @param token GitHub token for query
- * @param f (page) function to be performed on data returned from the query
+ * @return {Promise} array of query promises to be acted on
  */
-function forEachPage(url, token, f) {
+async function queryEachPage(url, token) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
     else url = url.concat("&per_page=50");
-    let cont = true;
     const request = new XMLHttpRequest();
-    for (let i = 1; cont && i < MAX_PAGES; i++) {
+    request.open('GET', url, false);
+    request.setRequestHeader('Authorization', 'token ' + token);
+    request.send();
+    let header = request.getResponseHeader("link");
+    const nPages = getNPages(header);
+    let promises = [];//todo linked list or something?
+
+    let i = 1;
+    for (; i <= nPages; i++) {
         console.log("pinging page " + i);
-        let page = sendHTTPRequest('GET',url,token,null,request);
 
-        f(page);
-
-        let header = request.getResponseHeader("link");
-        url = getNextPage(header);
-        if (!url) cont = false;
+        let pageUrl = url + "&page=" + i;
+        promises.push(fetch(pageUrl, {
+            method: 'GET',
+            headers: {
+                Authorization: 'token ' + token
+            }
+        }).then(result=>result.json()));
     }
+    return Promise.allSettled(promises);
 }
 
 /**
@@ -108,6 +125,17 @@ function getNextPage(header) {
     return null;
 }
 
+function getNPages(header) {
+    if (header) {
+        if (!header.includes('rel="last"')) return null;
+        const map = parseHeader(header);
+        const url = map.get('last')
+        return parseInt(url.split('&page=')[1]);
+    }
+    return 1;
+}
+
+//todo name parseLinkHeader
 function parseHeader(header) {
     try {
         if (!header) return null;
@@ -121,7 +149,7 @@ function parseHeader(header) {
             pageMap.set(key, url);
         }
         return pageMap;
-    } catch (e) {return null};
+    } catch (e) {return null}
 }
 
 module.exports.parseHeader = parseHeader;//todo
@@ -137,28 +165,46 @@ function chart() {
     document.getElementById("loader").style.visibility="visible";
 
     setTimeout(()=>
-        getData(repo, token)
-            .then((data) => {
+        getData(repo, token, (data)=>{
                 console.log("done");
-
                 document.getElementById("loader").style.visibility = "hidden";
-
                 display(data);
-            }),
+        }),
         100);
 }
 
-async function getData(repo, token) {
-    let data = new Map();
-    data = getNCommitsByAuthor(repo, token, data);
-    data = getNIssuesResolvedByAuthor(repo, token, data);
-    data = getNPullRequestsReviewedByAuthor(repo, token, data);
-    data.forEach((v)=>{
-        if (!v.commits) v.commits=0;
-        if (!v.issues) v.issues=0;
-        if (!v.pullRequests) v.pullRequests=0;
+function getData(repo, token, callback) {
+    let promises = [];
+    promises.push(getNCommitsByAuthor(repo, token));
+    promises.push(getNIssuesResolvedByAuthor(repo, token));
+    promises.push(getNPullRequestsReviewedByAuthor(repo, token));
+
+    Promise.allSettled(promises).then(results=>{
+        let maps = [];
+        results.forEach(promise=>maps.push(promise.value));
+        // get list of unique keys (authors)
+        let authors = {};
+        for (let map of maps) {
+            for (let author of map.keys()) {
+                if (!authors[author]) authors[author] = true;
+            }
+        }
+
+        // then for each add data
+        let data = new Map();
+        for (let author in authors) {
+            let d = {};
+            if (maps[0].has(author)) d.commits = maps[0].get(author);
+            else d.commits = 0;
+            if (maps[1].has(author)) d.issues = maps[1].get(author);
+            else d.issues = 0;
+            if (maps[1].has(author)) d.pullRequests = maps[1].get(author);
+            else d.pullRequests = 0;
+            data.set(author, d);
+        }
+
+        callback(data);//todo make promise instead?
     });
-    return data
 }
 
 function avg(author) {
@@ -176,7 +222,6 @@ function max(values) {
 }
 
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
-//todo text black and append on end if can't fit in bar, otherwise make white and inside bar
 function display(data) {
     //data = new Map();
     //data.set("SheetJSDev",{commits:54,issues:12,pullRequests:0});
