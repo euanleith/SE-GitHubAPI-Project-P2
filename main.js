@@ -4,7 +4,7 @@
 // -invalid repo
 // -other
 //todo misc bugs
-// -fcitx/fcitx5 some data doesn't have authors
+// -fcitx/fcitx5 some data doesn't have authors?
 
 const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 120000; // 2 minutes
@@ -185,7 +185,7 @@ function chart() {
     }
 
     const tokenCookie = getCookie('token');
-    let token = document.getElementById('token').value;//'6764502dddaf5db5b65ec5e781cc630fbe15ac62';
+    let token = document.getElementById('token').value;
     if (token !== '') {
         document.cookie = undefined; // clear cookies
         appendCookie('token',{value:token});
