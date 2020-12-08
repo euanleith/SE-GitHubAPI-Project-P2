@@ -22,27 +22,32 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
     console.log('getting n issues resolved by author');
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
     let promises = await queryEachPage(url, token);
+    let promisesPages = [];
     for (const promise of promises) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
             const num = text[i]['number'];
             console.log("pinging issue events " + num);
             let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
-            let promisesEvents = await queryEachPage(url, token);//todo is this necessary?; can jump out if 'closed' is found
-            //todo maybe don't await here
-            for (const promiseEvent of promisesEvents) {
-                let eventText = promiseEvent.value;
-                const closedEvent = eventText.find(e => e['event'] === "closed");
+            promisesPages.push(queryEachPage(url, token));
+        }
+    }
+    await Promise.allSettled(promisesPages).then(promiseEventsPages=>{
+        for (const promisesEventsPage of promiseEventsPages) {
+            const promiseEvents = promisesEventsPage.value;
+            for (const promiseEvent of promiseEvents) {
+                let events = promiseEvent.value;
+                const closedEvent = events.find(e => e['event'] === "closed");//todo case where can't find it
                 const actor = closedEvent['actor'];
                 let author;
                 if (actor === null) author = "null";
                 else author = actor['login'];
-                if (!data.has(author)) data.set(author, {issues:1});
-                else if(!data.get(author).issues)  data.get(author).issues=1;
+                if (!data.has(author)) data.set(author, {issues: 1});
+                else if (!data.get(author).issues) data.get(author).issues = 1;
                 else data.get(author).issues++;
             }
         }
-    }
+    });
     return data;
 }
 
@@ -50,25 +55,30 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
     console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
     let promises = await queryEachPage(url, token);
+    let promisesPages = [];
     for (const promise of promises) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
             const num = text[i]['number'];
             console.log("pinging pull request reviews " + num);
             let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';
-            let promiseReviewsPages = await queryEachPage(url, token);//todo is this necessary?
-            //todo maybe don't await here
-            for (const promiseReviews of promiseReviewsPages) {
-                const reviews = promiseReviews.value;
+            promisesPages.push(queryEachPage(url, token));
+        }
+    }
+    await Promise.allSettled(promisesPages).then(promiseReviewsPages=>{
+        for (const promiseReviewPage of promiseReviewsPages) {
+            const promiseReviews = promiseReviewPage.value;
+            for (const promiseReview of promiseReviews) {
+                const reviews = promiseReview.value;
                 for (const review of reviews) {
                     let author = review['user']['login'];
-                    if (!data.has(author)) data.set(author, {pullRequests:1});
-                    else if (!data.get(author).pullRequests) data.pullRequests=1;
+                    if (!data.has(author)) data.set(author, {pullRequests: 1});
+                    else if (!data.get(author).pullRequests) data.pullRequests = 1;
                     else data.get(author).pullRequests++;
                 }
             }
         }
-    }
+    });
     return data;
 }
 
