@@ -18,10 +18,17 @@ async function getNCommitsByAuthor(repo, token, data) {
     return data;
 }
 
+//todo
+// issues data is comprised of a list of pages of issues,
+// each of which has a list of pages of events
 async function getNIssuesResolvedByAuthor(repo, token, data) {
     console.log('getting n issues resolved by author');
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
+
+    // query each issue page, waiting for all to respond
     let promises = await queryEachPage(url, token);
+
+    // then for each issue page, query their event pages
     let promisesPages = [];
     for (const promise of promises) {
         let text = promise.value;
@@ -32,7 +39,11 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
             promisesPages.push(queryEachPage(url, token));
         }
     }
-    await Promise.allSettled(promisesPages).then(promiseEventsPages=>{
+
+    // wait for each list of event pages to respond
+    await Promise.allSettled(promisesPages).then(promiseEventsPages => {
+
+        // then for each list of event pages, find the user who closed the issue
         for (const promisesEventsPage of promiseEventsPages) {
             const promiseEvents = promisesEventsPage.value;
             for (const promiseEvent of promiseEvents) {
@@ -51,10 +62,17 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
     return data;
 }
 
+//todo
+// pull request data is comprised of a list of pages of pull requests,
+// each of which has a list of pages of reviews
 async function getNPullRequestsReviewedByAuthor(repo, token, data) {
     console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
+
+    // query each pull request page, waiting for all to respond
     let promises = await queryEachPage(url, token);
+
+    // then for each pull request page, query their review pages
     let promisesPages = [];
     for (const promise of promises) {
         let text = promise.value;
@@ -65,7 +83,11 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
             promisesPages.push(queryEachPage(url, token));
         }
     }
-    await Promise.allSettled(promisesPages).then(promiseReviewsPages=>{
+
+    // wait for each list of review pages to respond
+    await Promise.allSettled(promisesPages).then(promiseReviewsPages => {
+
+        // then for each list of review pages, for each review, find their author
         for (const promiseReviewPage of promiseReviewsPages) {
             const promiseReviews = promiseReviewPage.value;
             for (const promiseReview of promiseReviews) {
@@ -83,10 +105,10 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
 }
 
 /**
- * Returns the results for each page of a GitHub API query
+ * Pings each page of a GitHub API query
  * @param url url to query GitHub API
  * @param token GitHub token for query
- * @return {Promise} array of query promises to be acted on
+ * @return array of query promises to be acted on
  */
 async function queryEachPage(url, token) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
@@ -157,14 +179,12 @@ function chart() {
 
     document.getElementById("loader").style.visibility="visible";
 
-    setTimeout(()=>
-        getData(repo, token).then((data)=>{
-                console.log("done");
-                document.getElementById("loader").style.visibility = "hidden";
-                const clusters = clusterData(data);
-                display(clusters);
-        }),
-        100);
+    getData(repo, token).then((data)=> {
+        console.log("done");
+        document.getElementById("loader").style.visibility = "hidden";
+        const clusters = clusterData(data);
+        display(clusters);
+    });
 }
 
 async function getData(repo, token) {
@@ -214,11 +234,8 @@ function max(data) {
 
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
 function display(data) {
-    //data = new Map();
-    //data.set("SheetJSDev",{commits:54,issues:12,pullRequests:0});
-    //data.set("obj7",{commits:0,issues:1,pullRequests:0});
-
-    const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed']
+    const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed'];
+    const titles = ['Cluster 1','Cluster 2','Cluster 3'];
     const maxInput = max(data);
 
     const width = 190;
@@ -239,9 +256,6 @@ function display(data) {
         .classed("data-type-text", true)
         .text(d => d);
 
-    const titles = ['Cluster 1','Cluster 2','Cluster 3'];
-
-
     for (let i = 0; i < data.length; i++) {
 
         const authors = Array.from(data[i].keys());
@@ -259,7 +273,7 @@ function display(data) {
             .text(() => titles[i])
             .style("width", () => `${width}px`)
 
-        //todo put these in a function
+        // authors column
         rows.append("div")
             .selectAll("p")
             .data(authors)
@@ -271,55 +285,28 @@ function display(data) {
             .classed("author-text", true)
             .text(d => d);
 
-        rows.append("div")
-            .style("width", () => `${width}px`)
-            .selectAll("div")
-            .data(authors)
-            .enter()
-            .append("div")
-            .style("width", () => `${width - margin}px`)
-            .style("margin", () => `${margin}px`)
-            .classed("background", true)
-            .append("div")
-            .style("width", d => `${xScale(data[i].get(d).commits)}px`)
-            .classed("commit-bar", true)
-            .append("p")
-            .style("margin-left", () => `${margin}px`)
-            .text(d => data[i].get(d).commits)
-            .classed("label", true);
-
-        rows.append("div")
-            .style("width", () => `${width}px`)
-            .selectAll("div")
-            .data(authors)
-            .enter()
-            .append("div")
-            .style("width", () => `${width - margin}px`)
-            .style("margin", () => `${margin}px`)
-            .classed("background", true)
-            .append("div")
-            .style("width", d => `${xScale(data[i].get(d).issues)}px`)
-            .classed("issue-bar", true)
-            .append("p")
-            .style("margin-left", () => `${margin}px`)
-            .text(d => data[i].get(d).issues)
-            .classed("label", true);
-
-        rows.append('div')
-            .style("width", () => `${width}px`)
-            .selectAll("div")
-            .data(authors)
-            .enter()
-            .append("div")
-            .style("width", () => `${width - margin}px`)
-            .style("margin", () => `${margin}px`)
-            .classed("background", true)
-            .append("div")
-            .style("width", d => `${xScale(data[i].get(d).pullRequests)}px`)
-            .classed("pull-request-bar", true)
-            .append("p")
-            .style("margin-left", () => `${margin}px`)
-            .text(d => data[i].get(d).pullRequests)
-            .classed("label", true);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).commits);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).issues);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).pullRequests);
     }
+}
+
+//todo name f; data? idk
+function appendBarColumn(rows, width, margin, authors, xScale, f) {
+    rows.append('div')
+        .style("width", () => `${width}px`)
+        .selectAll("div")
+        .data(authors)
+        .enter()
+        .append("div")
+        .style("width", () => `${width - margin}px`)
+        .style("margin", () => `${margin}px`)
+        .classed("background", true)
+        .append("div")
+        .style("width", d => `${xScale(f(d))}px`)
+        .classed("pull-request-bar", true)
+        .append("p")
+        .style("margin-left", () => `${margin}px`)
+        .text(d => f(d))
+        .classed("label", true);
 }
