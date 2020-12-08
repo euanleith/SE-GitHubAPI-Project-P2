@@ -1,4 +1,10 @@
-//todo json parsing error handling
+// todo json parsing error handling
+//todo request error
+// -invalid token
+// -invalid repo
+// -other
+//todo misc bugs
+// -fcitx/fcitx5 some data doesn't have authors
 
 const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 120000; // 2 minutes
@@ -171,30 +177,47 @@ function parseHeader(header) {
 module.exports.parseHeader = parseHeader;//todo
 
 function chart() {
+    //todo wrap these in a function?
     const repo = document.getElementById('repo').value;
-    const token = document.getElementById('token').value;
-    if (repo === '' || token === '') {
-        alert("repo/token not entered")
+    if (repo === '') {
+        alert("repo not entered")
         return false;
     }
 
+    const tokenCookie = getCookie('token');
+    let token = document.getElementById('token').value;//'6764502dddaf5db5b65ec5e781cc630fbe15ac62';
+    if (token !== '') {
+        document.cookie = undefined; // clear cookies
+        appendCookie('token',{value:token});
+    } else {
+        if (tokenCookie) {
+            token = tokenCookie.value;
+        } else {
+            alert('token expired/not entered');
+            return false;
+        }
+    }
+
+    document.getElementById('repo').value = '';
+    document.getElementById('token').value = '';
     document.getElementById("loader").style.visibility="visible";
 
     getData(repo, token).then((data)=> {
         console.log("done");
-        document.getElementById("loader").style.visibility = "hidden";
         const clusters = cluster(data);
         display(clusters);
+        document.getElementById("loader").style.visibility = "hidden";
+        document.getElementById('oauthButton').style.display='block';
+        document.getElementById('oauthText').style.display='none';
+        document.getElementById('token').style.display='none';
     });
 }
 
 async function getData(repo, token) {
-    // document.cookie = undefined;
     console.log(document.cookie);
     const repoCookie = getCookie(repo);
-    if (repoCookie) {
-        return repoCookie
-    }
+    if (repoCookie) return repoCookie;
+
     let data = {}; // data is accumulated by each get function
     data = await getNCommitsByAuthor(repo, token, data);
     data = await getNIssuesResolvedByAuthor(repo, token, data);
@@ -219,7 +242,7 @@ function appendCookie(key, value) {
 
     let temp = JSON.parse(JSON.stringify(value)); // copy of value
     let d = new Date();
-    temp.expires = d.getTime() + EXPIRY_TIME; //todo note that can't have a github username 'expires'
+    temp.expires = d.getTime() + EXPIRY_TIME; //todo note that can't have a github username 'expires' (or a repo called 'token')
     //todo delete all expired cookies at some point?
 
     cookie[key] = temp; // insert or replace
@@ -360,4 +383,10 @@ function appendBarColumn(rows, width, margin, authors, xScale, f) {
         .style("margin-left", () => `${margin}px`)
         .text(d => f(d))
         .classed("label", true);
+}
+
+function newOAuth() {
+    document.getElementById('oauthButton').style.display='none'
+    document.getElementById('oauthText').style.display='inline'
+    document.getElementById('token').style.display='inline'
 }
