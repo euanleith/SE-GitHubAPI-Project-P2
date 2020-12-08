@@ -1,6 +1,7 @@
 //todo json parsing error handling
 
 const MAX_PAGES = 10; //todo
+const EXPIRY_TIME = 60000; // 1 minute
 
 async function getNCommitsByAuthor(repo, token, data) {
     console.log('getting n commits by author');
@@ -188,7 +189,7 @@ function chart() {
 }
 
 async function getData(repo, token) {
-    // document.cookie = undefined; //todo
+    console.log(document.cookie);
     const repoCookie = getCookie(repo);
     if (repoCookie) {
         return repoCookie
@@ -210,11 +211,18 @@ async function getData(repo, token) {
 
 function appendCookie(key, value) {
     let cookie = {};
-    if (document.cookie && document.cookie !== 'undefined' && document.cookie !== "")//todo what's the default value of the cookie?
+    if (document.cookie)
         cookie = JSON.parse(document.cookie);
     console.log('appending cookie from - to -');
     console.log(cookie);
-    cookie[key] = value;
+
+    let temp = JSON.parse(JSON.stringify(value)); // copy of value
+    let d = new Date();
+    temp.expires = d.getTime() + EXPIRY_TIME; //todo delete all expired cookies at some point?
+
+    console.log(cookie[key]);
+    cookie[key] = temp; // todo insert or replace new cookie
+    console.log(cookie[key]);
     document.cookie = JSON.stringify(cookie);
     console.log(cookie);
 }
@@ -224,8 +232,15 @@ function getCookie(key) {
         const cookie = JSON.parse(document.cookie);
         if (cookie.hasOwnProperty(key)) {
             console.log('found cookie for ' + key);
+            let d = new Date();
+            if (d.getTime() > cookie[key].expires) {
+                console.log('expired');
+                return undefined;
+            }
             console.log(cookie);
-            return cookie[key];
+            let temp = JSON.parse(JSON.stringify(cookie[key])); // copy of cookie[key]
+            delete temp.expires;
+            return temp;
         }
         return undefined;
     } catch (e) {return undefined;}
