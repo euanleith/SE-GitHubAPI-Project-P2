@@ -26,9 +26,10 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
             const num = text[i]['number'];
-            console.log("pinging issue " + num);
-            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';//todo might need to do this for each page?
-            let promisesEvents = await queryEachPage(url, token);
+            console.log("pinging issue events " + num);
+            let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
+            let promisesEvents = await queryEachPage(url, token);//todo is this necessary?; can jump out if 'closed' is found
+            //todo maybe don't await here
             for (const promiseEvent of promisesEvents) {
                 let eventText = promiseEvent.value;
                 const closedEvent = eventText.find(e => e['event'] === "closed");
@@ -53,9 +54,10 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
             const num = text[i]['number'];
-            console.log("pinging pull request " + num);
+            console.log("pinging pull request reviews " + num);
             let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';
-            let promiseReviewsPages = await queryEachPage(url, token);
+            let promiseReviewsPages = await queryEachPage(url, token);//todo is this necessary?
+            //todo maybe don't await here
             for (const promiseReviews of promiseReviewsPages) {
                 const reviews = promiseReviews.value;
                 for (const review of reviews) {
@@ -79,6 +81,7 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
 async function queryEachPage(url, token) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
     else url = url.concat("&per_page=50");
+
     let header = await fetch(url, {
         method: 'GET',
         headers: {
@@ -86,6 +89,7 @@ async function queryEachPage(url, token) {
         }
     }).then(result=>result.headers.get('link'));
     const nPages = getNPages(header);
+
     let promises = [];
     let i;
     for (i = 1; i <= nPages; i++) {
@@ -147,7 +151,8 @@ function chart() {
         getData(repo, token).then((data)=>{
                 console.log("done");
                 document.getElementById("loader").style.visibility = "hidden";
-                display(data);
+                const clusters = clusterData(data);
+                display(clusters);
         }),
         100);
 }
@@ -162,19 +167,37 @@ async function getData(repo, token) {
         if (!v.issues) v.issues=0;
         if (!v.pullRequests) v.pullRequests=0;
     });
+    //todo order; also then can cluster more efficiently maybe
     return data;
+}
+
+function clusterData(data) {
+    let bin1 = 3, bin2 = 10; //todo make variable?
+    let clusters = [new Map(), new Map(), new Map()];
+    data.forEach((v,k)=>{
+        const sum = v.commits + v.issues + v.pullRequests;
+        if (sum < bin1) clusters[2].set(k,v);
+        else if (sum < bin2) clusters[1].set(k,v);
+        else clusters[0].set(k,v);
+    });
+    return clusters;
 }
 
 function avg(author) {
     return author.commits + author.issues + author.pullRequests / 3;
 }
 
-function max(values) {
-    let max = -1;
-    for (let v of values) {
-        max = Math.max(max,v.commits);
-        max = Math.max(max,v.issues);
-        max = Math.max(max,v.pullRequests);
+function max(data) {
+    let max = 0;
+    if (data) {
+        for (const map of data) {
+            const values = map.values();
+            for (let v of values) {
+                max = Math.max(max, v.commits);
+                max = Math.max(max, v.issues);
+                max = Math.max(max, v.pullRequests);
+            }
+        }
     }
     return max;
 }
@@ -185,9 +208,8 @@ function display(data) {
     //data.set("SheetJSDev",{commits:54,issues:12,pullRequests:0});
     //data.set("obj7",{commits:0,issues:1,pullRequests:0});
 
-    const dataTypes = ['Author','No. commits','No. issues resolved',' No. pull requests reviewed']
-    const maxInput = max(data.values());
-    const authors = Array.from(data.keys());
+    const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed']
+    const maxInput = max(data);
 
     const width = 190;
     const height = 20;
@@ -201,71 +223,93 @@ function display(data) {
         .data(dataTypes)
         .enter()
         .append("p")
-        .style("width", () => `${width-(2*margin)}px`)
+        .style("width", () => `${width - (2 * margin)}px`)
         .style("margin", () => `${margin}px`)
         .style("height", () => `${height}px`)
         .classed("data-type-text", true)
         .text(d => d);
 
-    d3.select("#author-column")
-        .selectAll("p")
-        .data(authors)
-        .enter()
-        .append("p")
-        .style("width", () => `${width-(2*margin)}px`)
-        .style("margin", () => `${margin}px`)
-        .style("height", () => `${height}px`)
-        .classed("author-text", true)
-        .text(d => d);
+    const titles = ['Cluster 1','Cluster 2','Cluster 3'];
 
-    d3.select("#commit-bar-column")
-        .style("width", () => `${width}px`)
-        .selectAll("div")
-        .data(authors)
-        .enter()
-        .append("div")
-        .style("width", () => `${width-margin}px`)
-        .style("margin", () => `${margin}px`)
-        .classed("background",true)
-        .append("div")
-        .style("width", d => `${xScale(data.get(d).commits)}px`)
-        .classed("commit-bar", true)
-        .append("p")
-        .style("margin-left", () => `${margin}px`)
-        .text(d => data.get(d).commits)
-        .classed("label", true);
 
-    d3.select("#issue-bar-column")
-        .style("width", () => `${width}px`)
-        .selectAll("div")
-        .data(authors)
-        .enter()
-        .append("div")
-        .style("width", () => `${width-margin}px`)
-        .style("margin", () => `${margin}px`)
-        .classed("background",true)
-        .append("div")
-        .style("width", d => `${xScale(data.get(d).issues)}px`)
-        .classed("issue-bar", true)
-        .append("p")
-        .style("margin-left", () => `${margin}px`)
-        .text(d => data.get(d).issues)
-        .classed("label", true);
+    for (let i = 0; i < data.length; i++) {
 
-    d3.select("#pull-request-bar-column")
-        .style("width", () => `${width}px`)
-        .selectAll("div")
-        .data(authors)
-        .enter()
-        .append("div")
-        .style("width", () => `${width-margin}px`)
-        .style("margin", () => `${margin}px`)
-        .classed("background",true)
-        .append("div")
-        .style("width", d => `${xScale(data.get(d).pullRequests)}px`)
-        .classed("pull-request-bar", true)
-        .append("p")
-        .style("margin-left", () => `${margin}px`)
-        .text(d => data.get(d).pullRequests)
-        .classed("label", true);
+        const authors = Array.from(data[i].keys());
+
+        if (authors.length === 0) continue;
+
+        d3.select('body')
+            .append('p');
+
+        const rows = d3.select('body')
+            .append('div')
+            .classed('row',true);
+
+        rows.append('p')
+            .text(() => titles[i])
+            .style("width", () => `${width}px`)
+
+        //todo put these in a function
+        rows.append("div")
+            .selectAll("p")
+            .data(authors)
+            .enter()
+            .append("p")
+            .style("width", () => `${width - (2 * margin)}px`)
+            .style("margin", () => `${margin}px`)
+            .style("height", () => `${height}px`)
+            .classed("author-text", true)
+            .text(d => d);
+
+        rows.append("div")
+            .style("width", () => `${width}px`)
+            .selectAll("div")
+            .data(authors)
+            .enter()
+            .append("div")
+            .style("width", () => `${width - margin}px`)
+            .style("margin", () => `${margin}px`)
+            .classed("background", true)
+            .append("div")
+            .style("width", d => `${xScale(data[i].get(d).commits)}px`)
+            .classed("commit-bar", true)
+            .append("p")
+            .style("margin-left", () => `${margin}px`)
+            .text(d => data[i].get(d).commits)
+            .classed("label", true);
+
+        rows.append("div")
+            .style("width", () => `${width}px`)
+            .selectAll("div")
+            .data(authors)
+            .enter()
+            .append("div")
+            .style("width", () => `${width - margin}px`)
+            .style("margin", () => `${margin}px`)
+            .classed("background", true)
+            .append("div")
+            .style("width", d => `${xScale(data[i].get(d).issues)}px`)
+            .classed("issue-bar", true)
+            .append("p")
+            .style("margin-left", () => `${margin}px`)
+            .text(d => data[i].get(d).issues)
+            .classed("label", true);
+
+        rows.append('div')
+            .style("width", () => `${width}px`)
+            .selectAll("div")
+            .data(authors)
+            .enter()
+            .append("div")
+            .style("width", () => `${width - margin}px`)
+            .style("margin", () => `${margin}px`)
+            .classed("background", true)
+            .append("div")
+            .style("width", d => `${xScale(data[i].get(d).pullRequests)}px`)
+            .classed("pull-request-bar", true)
+            .append("p")
+            .style("margin-left", () => `${margin}px`)
+            .text(d => data[i].get(d).pullRequests)
+            .classed("label", true);
+    }
 }
