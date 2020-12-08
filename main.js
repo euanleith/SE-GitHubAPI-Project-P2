@@ -10,9 +10,9 @@ async function getNCommitsByAuthor(repo, token, data) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
             const author = text[i]['committer']['login'];
-            if (!data.has(author)) data.set(author, {commits:1});
-            else if (!data.get(author).commits) data.get(author).commits=1;
-            else data.get(author).commits++;
+            if (!data[author]) data[author] = {commits:1};
+            else if (!data[author].commits) data[author].commits=1;
+            else data[author].commits++;
         }
     }
     return data;
@@ -53,9 +53,9 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
                 let author;
                 if (actor === null) author = "null";
                 else author = actor['login'];
-                if (!data.has(author)) data.set(author, {issues: 1});
-                else if (!data.get(author).issues) data.get(author).issues = 1;
-                else data.get(author).issues++;
+                if (!data[author]) data[author] = {issues:1};
+                else if (!data[author].issues) data[author].issues=1;
+                else data[author].issues++;
             }
         }
     });
@@ -94,9 +94,9 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
                 const reviews = promiseReview.value;
                 for (const review of reviews) {
                     let author = review['user']['login'];
-                    if (!data.has(author)) data.set(author, {pullRequests: 1});
-                    else if (!data.get(author).pullRequests) data.pullRequests = 1;
-                    else data.get(author).pullRequests++;
+                    if (!data[author]) data[author] = {pullRequests:1};
+                    else if (!data[author].pullRequests) data[author].pullRequests=1;
+                    else data[author].pullRequests++;
                 }
             }
         }
@@ -188,28 +188,59 @@ function chart() {
 }
 
 async function getData(repo, token) {
-    let data = new Map();
+    // document.cookie = undefined; //todo
+    const repoCookie = getCookie(repo);
+    if (repoCookie) {
+        return repoCookie
+    }
+    let data = {}; // data is accumulated by each get function
     data = await getNCommitsByAuthor(repo, token, data);
     data = await getNIssuesResolvedByAuthor(repo, token, data);
     data = await getNPullRequestsReviewedByAuthor(repo, token, data);
-    data.forEach((v)=>{
+    for (const k in data) {
+        const v = data[k];
         if (!v.commits) v.commits=0;
         if (!v.issues) v.issues=0;
         if (!v.pullRequests) v.pullRequests=0;
-    });
+    }
     //todo order; also then can cluster more efficiently maybe
+    appendCookie(repo, data);
     return data;
+}
+
+function appendCookie(key, value) {
+    let cookie = {};
+    if (document.cookie && document.cookie !== 'undefined' && document.cookie !== "")//todo what's the default value of the cookie?
+        cookie = JSON.parse(document.cookie);
+    console.log('appending cookie from - to -');
+    console.log(cookie);
+    cookie[key] = value;
+    document.cookie = JSON.stringify(cookie);
+    console.log(cookie);
+}
+
+function getCookie(key) {
+    try {
+        const cookie = JSON.parse(document.cookie);
+        if (cookie.hasOwnProperty(key)) {
+            console.log('found cookie for ' + key);
+            console.log(cookie);
+            return cookie[key];
+        }
+        return undefined;
+    } catch (e) {return undefined;}
 }
 
 function clusterData(data) {
     let bin1 = 3, bin2 = 10; //todo make variable?
-    let clusters = [new Map(), new Map(), new Map()];
-    data.forEach((v,k)=>{
+    let clusters = [{},{},{}];
+    for (const k in data) {
+        const v = data[k];
         const sum = v.commits + v.issues + v.pullRequests;
-        if (sum < bin1) clusters[2].set(k,v);
-        else if (sum < bin2) clusters[1].set(k,v);
-        else clusters[0].set(k,v);
-    });
+        if (sum < bin1) clusters[2][k]=v;
+        else if (sum < bin2) clusters[1][k]=v;
+        else clusters[0][k]=v;
+    }
     return clusters;
 }
 
@@ -220,9 +251,9 @@ function avg(author) {
 function max(data) {
     let max = 0;
     if (data) {
-        for (const map of data) {
-            const values = map.values();
-            for (let v of values) {
+        for (const obj of data) {
+            for (const k in obj) {
+                const v = obj[k];
                 max = Math.max(max, v.commits);
                 max = Math.max(max, v.issues);
                 max = Math.max(max, v.pullRequests);
@@ -258,7 +289,7 @@ function display(data) {
 
     for (let i = 0; i < data.length; i++) {
 
-        const authors = Array.from(data[i].keys());
+        const authors = Object.keys(data[i]);
 
         if (authors.length === 0) continue;
 
@@ -285,9 +316,9 @@ function display(data) {
             .classed("author-text", true)
             .text(d => d);
 
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).commits);
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).issues);
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i].get(d).pullRequests);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].commits);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].issues);
+        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].pullRequests);
     }
 }
 
