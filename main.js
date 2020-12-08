@@ -1,7 +1,7 @@
 //todo json parsing error handling
 
 const MAX_PAGES = 10; //todo
-const EXPIRY_TIME = 60000; // 1 minute
+const EXPIRY_TIME = 120000; // 2 minutes
 
 async function getNCommitsByAuthor(repo, token, data) {
     console.log('getting n commits by author');
@@ -183,12 +183,13 @@ function chart() {
     getData(repo, token).then((data)=> {
         console.log("done");
         document.getElementById("loader").style.visibility = "hidden";
-        const clusters = clusterData(data);
+        const clusters = cluster(data);
         display(clusters);
     });
 }
 
 async function getData(repo, token) {
+    // document.cookie = undefined;
     console.log(document.cookie);
     const repoCookie = getCookie(repo);
     if (repoCookie) {
@@ -211,18 +212,17 @@ async function getData(repo, token) {
 
 function appendCookie(key, value) {
     let cookie = {};
-    if (document.cookie)
+    if (document.cookie && document.cookie !== 'undefined')
         cookie = JSON.parse(document.cookie);
     console.log('appending cookie from - to -');
     console.log(cookie);
 
     let temp = JSON.parse(JSON.stringify(value)); // copy of value
     let d = new Date();
-    temp.expires = d.getTime() + EXPIRY_TIME; //todo delete all expired cookies at some point?
+    temp.expires = d.getTime() + EXPIRY_TIME; //todo note that can't have a github username 'expires'
+    //todo delete all expired cookies at some point?
 
-    console.log(cookie[key]);
-    cookie[key] = temp; // todo insert or replace new cookie
-    console.log(cookie[key]);
+    cookie[key] = temp; // insert or replace
     document.cookie = JSON.stringify(cookie);
     console.log(cookie);
 }
@@ -246,7 +246,7 @@ function getCookie(key) {
     } catch (e) {return undefined;}
 }
 
-function clusterData(data) {
+function cluster(data) {
     let bin1 = 3, bin2 = 10; //todo make variable?
     let clusters = [{},{},{}];
     for (const k in data) {
@@ -304,6 +304,10 @@ function display(data) {
 
     for (let i = 0; i < data.length; i++) {
 
+        // delete old bar column
+        d3.select('#row'+i)
+            .remove();
+
         const authors = Object.keys(data[i]);
 
         if (authors.length === 0) continue;
@@ -313,6 +317,7 @@ function display(data) {
 
         const rows = d3.select('body')
             .append('div')
+            .attr("id",'row'+i)
             .classed('row',true);
 
         rows.append('p')
