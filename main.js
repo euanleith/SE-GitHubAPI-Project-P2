@@ -1,18 +1,16 @@
-// todo delete all expired cookies at some point?
-//todo misc bugs
-// -doesn't recognise module
-
 const EXPIRY_TIME = 480000; // 8 minutes
 const MAX_PAGES = 10;
 const BIN_1 = 3;
 const BIN_2 = 10;
 
-module.exports.parseLinkHeader = parseLinkHeader;
-module.exports.getNPages = getNPages;
-module.exports.addCookie = addCookie;
-module.exports.getCookie = getCookie;
-module.exports.cluster = cluster;
-module.exports.max = max;
+try {
+    module.exports.parseLinkHeader = parseLinkHeader;
+    module.exports.getNPages = getNPages;
+    module.exports.addCookie = addCookie;
+    module.exports.getCookie = getCookie;
+    module.exports.cluster = cluster;
+    module.exports.max = max;
+} catch(e) {}
 
 /**
  * Add to the given data the number of commits by each author in the given repo
