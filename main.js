@@ -1,25 +1,18 @@
+//e3ad358e46e8cc5d7c878e9126cf21437808321c
 // todo delete all expired cookies at some point?
-// todo json parsing error handling
-//todo request error
-// -invalid token
-// -invalid repo
-// -other
 //todo misc bugs
-// -GerardColman/DieRoller commits (and probably issues&prs) can be null
 // -web-flow?
 // -doesn't recognise module
 
 const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 480000; // 8 minutes
 
-module.exports.EXPIRY_TIME = EXPIRY_TIME;
 module.exports.parseLinkHeader = parseLinkHeader;
 module.exports.getNPages = getNPages;
 module.exports.addCookie = addCookie;
 module.exports.getCookie = getCookie;
 module.exports.cluster = cluster;
 module.exports.max = max;
-module.exports.getToken = getToken;
 
 /**
  * Add to the given data the number of commits by each author in the given repo
@@ -266,6 +259,7 @@ function parseLinkHeader(header) {
 function getToken() {
     const tokenCookie = getCookie('token');
     let token = document.getElementById('token').value;
+    //let token = 'e3ad358e46e8cc5d7c878e9126cf21437808321c';
     if (token !== '') {
         document.cookie = undefined; // clear cookies
         addCookie('token',{value:token});
@@ -284,6 +278,9 @@ function getToken() {
  * gets and displays data for some user inputted GitHub repository and OAuth token
  */
 async function run() {
+    //const repo = 'X-Newbie/XBot-Remix';
+    //const repo = 'SheetJS/j';
+    //const repo = 'fcitx/fcitx5';
     const repo = document.getElementById('repo').value;
     if (!repo) {
         alert("repo not entered");
@@ -302,7 +299,7 @@ async function run() {
 
     document.getElementById('repo').value = '';
     document.getElementById('token').value = '';
-    document.getElementById("loader").style.visibility = "visible";
+    document.getElementById("loader").style.visibility = "visible";//todo put this earlier?
 
     const data = await getData(repo, token);
     console.log("done");
@@ -347,14 +344,22 @@ async function getData(repo, token) {
     data = await getNCommitsByAuthor(repo, token, data);
     data = await getNIssuesResolvedByAuthor(repo, token, data);
     data = await getNPullRequestsReviewedByAuthor(repo, token, data);
+    let sortArr = [];
     for (const k in data) {
         const v = data[k];
         if (!v.commits) v.commits=0;
         if (!v.issues) v.issues=0;
         if (!v.pullRequests) v.pullRequests=0;
+        const sum = v.commits + v.issues + v.pullRequests;
+        sortArr.push([k,sum]);
     }
-    //todo order; also then can cluster more efficiently maybe
-    return data;
+    sortArr.sort((a,b)=>b[1]-a[1]);
+    let sortedData = {};
+    for (const a of sortArr) {
+        const k = a[0];
+        sortedData[k] = data[k];
+    }
+    return sortedData;
 }
 
 /**
@@ -408,8 +413,9 @@ function getCookie(key) {
 }
 
 /**
- * Organises the given data into 3 bins of [data < 3, 3 <= data < 10, data > 10].
- * Given data must contain numbers to be clustered by as described by the function 'num'
+ * Organises the given data into 3 bins of [data <= 3, 3 < data <= 10, data > 10].
+ * Given data must be ordered high-low,
+ * and contain numbers to be clustered by as described by the function 'num'
  * @param data data to be clustered
  * @param num function which returns the number value for each datum
  * @returns array of 3 bins;
@@ -418,22 +424,22 @@ function getCookie(key) {
  */
 function cluster(data, num=datum=>datum) {
     if (!num) return null;
-    let bin1 = 3, bin2 = 10; //todo make variable?
     let clusters = [{},{},{}];
+    if (!data) return clusters;
+    let bin1 = 3, bin2 = 10; //todo make variable?
+    let temp = JSON.parse(JSON.stringify(data)) // copy of data
     for (const k in data) {
-        if (!data.hasOwnProperty(k)) continue;
-        const datum = data[k];
+        if (!temp.hasOwnProperty(k)) continue;
+        const datum = temp[k];
         const val = num(datum);
-        if (!val) continue;
-        if (val < bin1) clusters[2][k]=datum;
-        else if (val < bin2) clusters[1][k]=datum;
-        else if (val > bin2) clusters[0][k]=datum;
+        if (!val) return null;
+        if (val > bin2) clusters[0][k]=datum;
+        else if (val > bin1) clusters[1][k]=datum;
+        else if (val <= bin1) break;
+        delete temp[k];
     }
+    if (temp) clusters[2]=temp;
     return clusters;
-}
-
-function avg(author) {
-    return author.commits + author.issues + author.pullRequests / 3;
 }
 
 /**
@@ -458,7 +464,6 @@ function max(obj) {
     return m;
 }
 
-//todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
 /**
  * Displays the given data as a list of split bar charts
  * @param data data to be displayed split into clusters

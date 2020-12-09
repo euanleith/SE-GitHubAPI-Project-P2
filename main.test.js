@@ -1,14 +1,15 @@
 const myModule = require('./main');
-const EXPIRY_TIME = myModule.EXPIRY_TIME;
 const getNPages = myModule.getNPages;
 const parseLinkHeader = myModule.parseLinkHeader;
 const addCookie = myModule.addCookie;
 const getCookie = myModule.getCookie;
 const cluster = myModule.cluster;
 const max = myModule.max;
-const getToken = myModule.getToken;
 
-//todo maybe do parseLinkHeader properly with a library
+//todo;
+// unit tests for http requests (with a mocker)
+// integration tests
+
 test('parseLinkHeader & getNPages', () => {
 
     // test null/undefined/empty
@@ -66,12 +67,6 @@ test('parseLinkHeader & getNPages', () => {
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15>; "nxt"'
     expect(parseLinkHeader(header)).toBeNull();
     expect(getNPages(header)).toBeNull();
-
-    //todo
-    // header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next" ' +
-    //     '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34>; rel="last"'
-    // expect(parseLinkHeader(header)).toBeNull();
-    // expect(getNPages(header)).toBeNull();
 });
 
 test('addCookie & getCookie', () => {
@@ -137,9 +132,11 @@ test('addCookie & getCookie', () => {
 });
 
 test('cluster',() => {
+    // assumes input is ordered high-low
+
     let num = v => {
         if (v) return v.commits + v.issues + v.pullRequests;
-    };//todo name
+    };
 
     // test undefined/null/empty
 
@@ -151,14 +148,14 @@ test('cluster',() => {
     let data = {};
     let val1 = 3;
     data['key1']=val1;
-    expect(cluster(data)).toEqual([{},{key1:val1},{}]);
+    expect(cluster(data)).toEqual([{},{},{key1:val1}]);
 
     val1 = {a:1,b:2,c:3};
     data['key1']=val1;
     expect(cluster(data)).toEqual([{},{},{}]);
 
     expect(cluster(data,null)).toBeNull();
-    expect(cluster(data,()=>undefined)).toEqual([{},{},{}]);
+    expect(cluster(data,()=>undefined)).toBeNull();
 
     // test std
 
@@ -170,9 +167,9 @@ test('cluster',() => {
     data['key2']=val2;
     expect(cluster(data,num)).toEqual([{},{key1:val1},{key2:val2}]);
 
-    let val3 = {commits:3,issues:4,pullRequests:-1};
+    let val3 = {commits:1,issues:4,pullRequests:-6};
     data['key3']=val3;
-    expect(cluster(data,num)).toEqual([{},{key1:val1,key3:val3},{key2:val2}]);
+    expect(cluster(data,num)).toEqual([{},{key1:val1},{key2:val2,key3:val3}]);
 
     data = {};
     val1 = {a:'v1',b:1,c:'v2'};
@@ -190,7 +187,7 @@ test('cluster',() => {
     expect(cluster(data,num)).toEqual([{key1:val1},{},{}]);
 
     data['key2']={commits:1};
-    expect(cluster(data,num)).toEqual([{key1:val1},{},{}]);
+    expect(cluster(data,num)).toBeNull();
 });
 
 test('max', () => {
@@ -211,22 +208,4 @@ test('max', () => {
     expect(max([{a:1,b:true,c:{}},{a:5,b:'str',c:2}])).toBe(5);
 
     // test invalid input todo are there any?
-});
-
-//todo
-test('getToken', () => {
-    let d = new Date();
-
-    // test undefined/null/empty
-    document.cookie = undefined;
-    expect(getToken()).toBeUndefined();
-    document.cookie = `{"token":{"value":"","expires":${d.getTime()}}}`;
-    expect(getToken()).toBeUndefined();
-
-    // test std
-    document.cookie=undefined;
-    document.cookie = JSON.stringify({token:{value:"myToken",expires:d.getTime() + EXPIRY_TIME}});
-    document.getElementById('token').value = '';//todo need to load window first...
-    expect(getToken()).toBe("myToken");
-    // test invalid
 });
