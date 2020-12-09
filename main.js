@@ -4,7 +4,9 @@
 // -invalid repo
 // -other
 //todo misc bugs
-// -fcitx/fcitx5 some data doesn't have authors?
+// -fcitx/fcitx5 some data doesn't have authors
+// -GerardColman/DieRoller commits (and probably issues&prs) can be null
+// -web-flow?
 
 const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 120000; // 2 minutes
@@ -151,6 +153,7 @@ function getNPages(header) {
     if (header) {
         if (!header.includes('rel="last"')) return null;
         const map = parseHeader(header);
+        if (!map) return null;
         const url = map.get('last')
         return parseInt(url.split('&page=')[1]);
     }
@@ -175,6 +178,11 @@ function parseHeader(header) {
 }
 
 module.exports.parseHeader = parseHeader;//todo
+module.exports.getNPages = getNPages;
+module.exports.addCookie = addCookie;
+module.exports.getCookie = getCookie;
+module.exports.cluster = cluster;
+module.exports.max = max;
 
 function chart() {
     //todo wrap these in a function?
@@ -188,7 +196,7 @@ function chart() {
     let token = document.getElementById('token').value;
     if (token !== '') {
         document.cookie = undefined; // clear cookies
-        appendCookie('token',{value:token});
+        addCookie('token',{value:token});
     } else {
         if (tokenCookie) {
             token = tokenCookie.value;
@@ -204,7 +212,9 @@ function chart() {
 
     getData(repo, token).then((data)=> {
         console.log("done");
-        const clusters = cluster(data);
+        const clusters = cluster(data, v=>{
+            if (v) return v.commits+v.issues+v.pullRequests
+        });
         display(clusters);
         document.getElementById("loader").style.visibility = "hidden";
         document.getElementById('oauthButton').style.display='block';
@@ -229,25 +239,30 @@ async function getData(repo, token) {
         if (!v.pullRequests) v.pullRequests=0;
     }
     //todo order; also then can cluster more efficiently maybe
-    appendCookie(repo, data);
+    addCookie(repo, data);
     return data;
 }
 
-function appendCookie(key, value) {
+function addCookie(key, value) {
+    if (!key || !value) {
+        console.log('appending cookie failed');
+        return null;
+    }
     let cookie = {};
     if (document.cookie && document.cookie !== 'undefined')
         cookie = JSON.parse(document.cookie);
     console.log('appending cookie from - to -');
     console.log(cookie);
 
-    let temp = JSON.parse(JSON.stringify(value)); // copy of value
+    let temp = {value:JSON.parse(JSON.stringify(value))};
     let d = new Date();
-    temp.expires = d.getTime() + EXPIRY_TIME; //todo note that can't have a github username 'expires' (or a repo called 'token')
+    temp.expires = d.getTime() + EXPIRY_TIME;
     //todo delete all expired cookies at some point?
 
     cookie[key] = temp; // insert or replace
     document.cookie = JSON.stringify(cookie);
     console.log(cookie);
+    return cookie;
 }
 
 function getCookie(key) {
@@ -261,23 +276,26 @@ function getCookie(key) {
                 return undefined;
             }
             console.log(cookie);
-            let temp = JSON.parse(JSON.stringify(cookie[key])); // copy of cookie[key]
-            delete temp.expires;
-            return temp;
+            return cookie[key].value;
         }
         return undefined;
     } catch (e) {return undefined;}
 }
 
-function cluster(data) {
+// todo assumes data already normalised (contains only commits, issues, and pullRequests)
+// todo note some error handling will have to be done in f
+function cluster(data, f=v=>v) {//todo name f
+    if (!f) return null;
     let bin1 = 3, bin2 = 10; //todo make variable?
     let clusters = [{},{},{}];
     for (const k in data) {
+        if (!data.hasOwnProperty(k)) continue;
         const v = data[k];
-        const sum = v.commits + v.issues + v.pullRequests;
-        if (sum < bin1) clusters[2][k]=v;
-        else if (sum < bin2) clusters[1][k]=v;
-        else clusters[0][k]=v;
+        const val = f(v);
+        if (!val) continue;
+        if (val < bin1) clusters[2][k]=v;
+        else if (val < bin2) clusters[1][k]=v;
+        else if (val > bin2) clusters[0][k]=v;
     }
     return clusters;
 }
@@ -286,19 +304,22 @@ function avg(author) {
     return author.commits + author.issues + author.pullRequests / 3;
 }
 
-function max(data) {
-    let max = 0;
-    if (data) {
-        for (const obj of data) {
-            for (const k in obj) {
+//todo returns the max number value in an object and its children objects
+function max(obj) {
+    let m = -Infinity;
+    if (obj) {
+        for (const k in obj) {
+            if (obj.hasOwnProperty(k)) {
                 const v = obj[k];
-                max = Math.max(max, v.commits);
-                max = Math.max(max, v.issues);
-                max = Math.max(max, v.pullRequests);
+                if (typeof v === 'number') {
+                    m = Math.max(m, v);
+                } else if (typeof v === 'object' && v !== null) {
+                    m = Math.max(m, max(v));
+                }
             }
         }
     }
-    return max;
+    return m;
 }
 
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
@@ -306,6 +327,7 @@ function display(data) {
     const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed'];
     const titles = ['Cluster 1','Cluster 2','Cluster 3'];
     const maxInput = max(data);
+    console.log(maxInput);
 
     const width = 190;
     const height = 20;
