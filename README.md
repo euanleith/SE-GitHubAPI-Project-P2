@@ -3,7 +3,7 @@
 The goal of this project is to query the GitHub API to aid in answering the question 'how do hard-workers spend their time?'.
 
 The degree of work is be calculated as the number of actions (commits, issues resolved, and pull requests reviewed) each user performs for each repo.
-(This process could be extended with greater specificity of the group of actions. For example, 'commits' can be split into 'new code' and 'rewritten code' (i.e. code churn).)
+(This process could be extended in two ways. Firstly, by (somehow) calculating the relative weights of each action-type. And secondly by adding greater specificity to the group of actions. For example, 'commits' could be split into 'new code' and 'rewritten code' (i.e. code churn).)
 
 The users are then split into three clusters which can be understood as 'hard workers', 'average workers', and 'light workers'.
 
@@ -27,7 +27,7 @@ In order to remove the need to repeatedly input OAuth tokens, the inputted token
 
 ### UI
 
-The displayed graph is made using the D3 library.  
+The displayed graph is made using the D3 library. It shows the proportions of each action for each user. This can be analysed to approximate how workers spend their time; but also to approximate the relative levels of work between workers, both overall and for each action.  
 
 ### Clustering
 
