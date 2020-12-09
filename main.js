@@ -1,11 +1,12 @@
-//e3ad358e46e8cc5d7c878e9126cf21437808321c
 // todo delete all expired cookies at some point?
 //todo misc bugs
 // -web-flow?
 // -doesn't recognise module
 
-const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 480000; // 8 minutes
+const MAX_PAGES = 10;
+const BIN_1 = 3;
+const BIN_2 = 10;
 
 module.exports.parseLinkHeader = parseLinkHeader;
 module.exports.getNPages = getNPages;
@@ -259,7 +260,6 @@ function parseLinkHeader(header) {
 function getToken() {
     const tokenCookie = getCookie('token');
     let token = document.getElementById('token').value;
-    //let token = 'e3ad358e46e8cc5d7c878e9126cf21437808321c';
     if (token !== '') {
         document.cookie = undefined; // clear cookies
         addCookie('token',{value:token});
@@ -278,9 +278,6 @@ function getToken() {
  * gets and displays data for some user inputted GitHub repository and OAuth token
  */
 async function run() {
-    //const repo = 'X-Newbie/XBot-Remix';
-    //const repo = 'SheetJS/j';
-    //const repo = 'fcitx/fcitx5';
     const repo = document.getElementById('repo').value;
     if (!repo) {
         alert("repo not entered");
@@ -297,9 +294,9 @@ async function run() {
         return;
     }
 
+    document.getElementById("loader").style.visibility = "visible";
     document.getElementById('repo').value = '';
     document.getElementById('token').value = '';
-    document.getElementById("loader").style.visibility = "visible";//todo put this earlier?
 
     const data = await getData(repo, token);
     console.log("done");
@@ -374,20 +371,23 @@ function addCookie(key, value) {
         console.log('appending cookie failed');
         return null;
     }
+
+    console.log('appending cookie from - to -');
+
     let cookie = {};
     if (document.cookie && document.cookie !== 'undefined')
         cookie = JSON.parse(document.cookie);
-    console.log('appending cookie from - to -');
     console.log(cookie);
 
-    let temp = {value:JSON.parse(JSON.stringify(value))};
+    let newCookie = cookie;
+
+    newCookie[key] = {value:value};
     let d = new Date();
-    temp.expires = d.getTime() + EXPIRY_TIME;
+    newCookie[key].expires = d.getTime() + EXPIRY_TIME;
 
-    cookie[key] = temp; // insert or replace
-    document.cookie = JSON.stringify(cookie);
-    console.log(cookie);
-    return cookie;
+    document.cookie = JSON.stringify(newCookie);
+    console.log(newCookie);
+    return newCookie;
 }
 
 /**
@@ -408,6 +408,7 @@ function getCookie(key) {
             console.log(cookie);
             return cookie[key].value;
         }
+        console.log("didn't find cookie for " + key);
         return undefined;
     } catch (e) {return undefined;}
 }
@@ -426,16 +427,15 @@ function cluster(data, num=datum=>datum) {
     if (!num) return null;
     let clusters = [{},{},{}];
     if (!data) return clusters;
-    let bin1 = 3, bin2 = 10; //todo make variable?
     let temp = JSON.parse(JSON.stringify(data)) // copy of data
     for (const k in data) {
         if (!temp.hasOwnProperty(k)) continue;
         const datum = temp[k];
         const val = num(datum);
         if (!val) return null;
-        if (val > bin2) clusters[0][k]=datum;
-        else if (val > bin1) clusters[1][k]=datum;
-        else if (val <= bin1) break;
+        if (val > BIN_2) clusters[0][k]=datum;
+        else if (val > BIN_1) clusters[1][k]=datum;
+        else if (val <= BIN_1) break;
         delete temp[k];
     }
     if (temp) clusters[2]=temp;

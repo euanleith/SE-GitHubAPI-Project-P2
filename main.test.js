@@ -1,5 +1,4 @@
 const myModule = require('./main');
-const getNPages = myModule.getNPages;
 const parseLinkHeader = myModule.parseLinkHeader;
 const addCookie = myModule.addCookie;
 const getCookie = myModule.getCookie;
@@ -10,7 +9,7 @@ const max = myModule.max;
 // unit tests for http requests (with a mocker)
 // integration tests
 
-test('parseLinkHeader & getNPages', () => {
+test('parseLinkHeader', () => {
 
     // test null/undefined/empty
 
@@ -19,11 +18,6 @@ test('parseLinkHeader & getNPages', () => {
     expect(parseLinkHeader(null)).toBeNull();
     expect(parseLinkHeader('')).toBe(null);
 
-    expect(getNPages()).toBe(1);
-    expect(getNPages(undefined)).toBe(1);
-    expect(getNPages(null)).toBe(1);
-    expect(getNPages('')).toBe(1);
-
     // test std
 
     let header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next"';
@@ -31,7 +25,6 @@ test('parseLinkHeader & getNPages', () => {
     map.set('next','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2');
     let out = parseLinkHeader(header);
     expect(out).toEqual(map);
-    expect(getNPages(header)).toBeNull();
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next", ' +
         '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34>; rel="last"'
@@ -40,7 +33,6 @@ test('parseLinkHeader & getNPages', () => {
     map.set('last','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34');
     out = parseLinkHeader(header);
     expect(out).toEqual(map);
-    expect(getNPages(header)).toBe(34);
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=3>; rel="next", ' +
         '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=4>; rel="last", ' +
@@ -52,21 +44,17 @@ test('parseLinkHeader & getNPages', () => {
     map.set('prev','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=1');
     out = parseLinkHeader(header);
     expect(out).toEqual(map);
-    expect(getNPages(header)).toBe(4);
 
     // test invalid
 
     header = 'https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15; rel="next"'
     expect(parseLinkHeader(header)).toBeNull();
-    expect(getNPages(header)).toBeNull();
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15>'
     expect(parseLinkHeader(header)).toBeNull();
-    expect(getNPages(header)).toBeNull();
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15>; "nxt"'
     expect(parseLinkHeader(header)).toBeNull();
-    expect(getNPages(header)).toBeNull();
 });
 
 test('addCookie & getCookie', () => {
@@ -193,6 +181,7 @@ test('cluster',() => {
 test('max', () => {
 
     // test undefined/null/empty
+
     expect(max()).toBe(-Infinity);
     expect(max(undefined)).toBe(-Infinity);
     expect(max(null)).toBe(-Infinity);
@@ -201,11 +190,15 @@ test('max', () => {
     expect(max(new Map())).toBe(-Infinity);
 
     // test std
+
     expect(max({a:2})).toBe(2);
     expect(max({a:1,b:3,c:2})).toBe(3);
     expect(max({a:{a:1,b:3,c:2},b:{a:5,b:1,c:2}})).toBe(5);
     expect(max([{a:-1,b:-3,c:-2},{a:-5,b:-1,c:-2}])).toBe(-1);
     expect(max([{a:1,b:true,c:{}},{a:5,b:'str',c:2}])).toBe(5);
 
-    // test invalid input todo are there any?
+    // test invalid input
+
+    expect(max(1)).toBe(-Infinity);
+    expect(max({a:'a',b:'b',c:'c'})).toBe(-Infinity);
 });
