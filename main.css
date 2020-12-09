@@ -38,8 +38,10 @@
     display: inline;
 }
 
-.inner {
-    position: absolute;
+.author-column {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
 }
 
 .background {

@@ -5,13 +5,12 @@
 // -invalid repo
 // -other
 //todo misc bugs
-// -fcitx/fcitx5 some data doesn't have authors -> it's just that the margins between the authors is less than that between the bars
 // -GerardColman/DieRoller commits (and probably issues&prs) can be null
 // -web-flow?
 // -doesn't recognise module
 
 const MAX_PAGES = 10; //todo
-const EXPIRY_TIME = 120000; // 2 minutes
+const EXPIRY_TIME = 480000; // 8 minutes
 
 module.exports.EXPIRY_TIME = EXPIRY_TIME;
 module.exports.parseLinkHeader = parseLinkHeader;
@@ -200,7 +199,7 @@ async function queryEachPage(url, token) {
             headers: {Authorization: 'token ' + token}
             })
             .then(response=>{
-                if (!response.ok) return {};//todo
+                if (!response.ok) return {};
                 console.log('got response');
                 return response.json();
             })
@@ -221,7 +220,7 @@ async function getNPages(url, token) {
         headers: {Authorization: 'token ' + token}
         })
         .then(response=>{
-            if (!response.ok) return {};//todo
+            if (!response.ok) return {};
             return response.headers.get('link');
         });
 
@@ -307,7 +306,7 @@ async function run() {
 
     const data = await getData(repo, token);
     console.log("done");
-    addCookie(repo, data);
+    addCookie(repo, data);//todo this isn't updating expiry when repo cookie already exists?
     const clusters = cluster(data, v => {
         if (v) return v.commits + v.issues + v.pullRequests;
     });
@@ -341,7 +340,6 @@ async function isValidQuery(repo, token) {
  * @returns data collected
  */
 async function getData(repo, token) {
-    console.log(document.cookie);
     const repoCookie = getCookie(repo);
     if (repoCookie) return repoCookie;
 
@@ -361,6 +359,7 @@ async function getData(repo, token) {
 
 /**
  * Adds the given key-value pair to the cookie
+ * Note that changing EXPIRY_TIME won't change the expiry time of existing cookies
  * @param key key to add
  * @param value value to add
  * @returns new cookie if valid key & value, otherwise null
@@ -413,7 +412,7 @@ function getCookie(key) {
  * Given data must contain numbers to be clustered by as described by the function 'num'
  * @param data data to be clustered
  * @param num function which returns the number value for each datum
- * @returns {[{}, {}, {}]|null} array of 3 bins;
+ * @returns array of 3 bins;
  * will return empty values where a number can't be found;
  * returns null if num is null/undefined
  */
@@ -478,9 +477,9 @@ function display(data) {
     }
 
     const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed'];
-    const titles =[];
+    const clusters =[];
     for (let i = 0; i < data.length; i++) {
-        titles.push('Cluster ' + (i+1));
+        clusters.push('Cluster ' + (i+1));
     }
     const maxInput = max(data);
 
@@ -520,20 +519,22 @@ function display(data) {
             .attr("id",'row'+i)
             .classed('row',true);
 
+        // clusters column
         rows.append('p')
-            .text(() => titles[i])
-            .style("width", () => `${width}px`)
+            .text(() => clusters[i])
+            .style("width", () => `${width-margin}px`)
+            .style('margin-right', () => `${margin}px`)
+            .style('display', () => 'inline-block')
 
         // authors column
         rows.append("div")
+            .style("width", () => `${width - (2 * margin)}px`)
+            .classed("author-column", true)
             .selectAll("p")
             .data(authors)
             .enter()
             .append("p")
-            .style("width", () => `${width - (2 * margin)}px`)
-            .style("margin", () => `${margin}px`)
-            .style("height", () => `${height}px`)
-            .classed("author-text", true)
+            .style('margin', () => `${margin}px`)
             .text(d => d);
 
         append(rows, width, margin, authors, xScale, d=>data[i][d].commits);
@@ -543,29 +544,29 @@ function display(data) {
 }
 
 /**
- * Append a div of keys and bars for their data to a given row;
- * i.e. key1 : key1DataBars, key2 : key2DataBars, etc.
+ * Appends a row of bars associated with a given list of keys to a given row
  * @param rows rows div to be added to
  * @param width with of the bar column
  * @param margin margin of the bar column
- * @param keys keys to be added, and to access the data of the subsequent bars
+ * @param keys keys for each row
  * @param xScale scale of the bar column
  * @param getVal function to find the value associated with each key
  */
 function append(rows, width, margin, keys, xScale, getVal) {
-    rows.append('div')
-        .style("width", () => `${width}px`)
+    rows.append('div') // keys
+        .style("width", () => `${width-margin}px`)
+        .style('margin-right', () => `${margin}px`)
         .selectAll("div")
         .data(keys)
         .enter()
-        .append("div")
+        .append("div") // bar background
         .style("width", () => `${width - margin}px`)
         .style("margin", () => `${margin}px`)
         .classed("background", true)
-        .append("div")
+        .append("div") // bar
         .style("width", key => `${xScale(getVal(key))}px`)
         .classed("pull-request-bar", true)
-        .append("p")
+        .append("p") // bar text
         .style("margin-left", () => `${margin}px`)
         .text(key => getVal(key))
         .classed("label", true);
