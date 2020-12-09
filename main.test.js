@@ -5,7 +5,7 @@ const getCookie = myModule.getCookie;
 const cluster = myModule.cluster;
 const max = myModule.max;
 
-//todo;
+//todo (don't have time);
 // unit tests for http requests (with a mocker)
 // integration tests
 

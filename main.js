@@ -1,6 +1,5 @@
 // todo delete all expired cookies at some point?
 //todo misc bugs
-// -web-flow?
 // -doesn't recognise module
 
 const EXPIRY_TIME = 480000; // 8 minutes
@@ -34,7 +33,7 @@ async function getNCommitsByAuthor(repo, token, data) {
         for (let i = 0; i < text.length; i++) {
             let author;
             try {
-                author = text[i]['committer']['login'];
+                author = text[i]['author']['login'];
             } catch (e) {
                 console.error(e);
                 continue;
