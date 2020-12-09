@@ -1,3 +1,4 @@
+// todo delete all expired cookies at some point?
 // todo json parsing error handling
 //todo request error
 // -invalid token
@@ -7,11 +8,31 @@
 // -fcitx/fcitx5 some data doesn't have authors
 // -GerardColman/DieRoller commits (and probably issues&prs) can be null
 // -web-flow?
+// -doesn't recognise module
 
 const MAX_PAGES = 10; //todo
 const EXPIRY_TIME = 120000; // 2 minutes
 
+module.exports.EXPIRY_TIME = EXPIRY_TIME;
+module.exports.parseLinkHeader = parseLinkHeader;
+module.exports.getNPages = getNPages;
+module.exports.addCookie = addCookie;
+module.exports.getCookie = getCookie;
+module.exports.cluster = cluster;
+module.exports.max = max;
+module.exports.getToken = getToken;
+
+/**
+ * Add to the given data the number of commits by each author in the given repo
+ * @param repo repo to query
+ * @param token OAuth token for query
+ * @param data data to add to
+ * @returns updated data
+ */
 async function getNCommitsByAuthor(repo, token, data) {
+    // commits data is comprised of a list of pages of commits
+    // each of which has an author 'login'
+
     console.log('getting n commits by author');
     let url = 'https://api.github.com/repos/' + repo + '/commits';
     let promises = await queryEachPage(url, token);
@@ -27,10 +48,18 @@ async function getNCommitsByAuthor(repo, token, data) {
     return data;
 }
 
-//todo
-// issues data is comprised of a list of pages of issues,
-// each of which has a list of pages of events
+/**
+ * Add to the given data the number of issues resolved by each author in the given repo
+ * @param repo repo to query
+ * @param token OAuth token for query
+ * @param data data to add to
+ * @returns updated data
+ */
 async function getNIssuesResolvedByAuthor(repo, token, data) {
+    // issues data is comprised of a list of pages of issues,
+    // each of which has a list of pages of events
+    // each of which has an 'actor' who closed the issue
+
     console.log('getting n issues resolved by author');
     let url = 'https://api.github.com/repos/' + repo + '/issues?state=closed';
 
@@ -71,10 +100,18 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
     return data;
 }
 
-//todo
-// pull request data is comprised of a list of pages of pull requests,
-// each of which has a list of pages of reviews
+/**
+ * Add to the given data the number of pull requests reviewed by each author in the given repo
+ * @param repo repo to query
+ * @param token OAuth token for query
+ * @param data data to add to
+ * @returns updated data
+ */
 async function getNPullRequestsReviewedByAuthor(repo, token, data) {
+    // pull request data is comprised of a list of pages of pull requests,
+    // each of which has a list of pages of reviews
+    // each of which has an author 'login'
+
     console.log('getting n pull requests reviewed by author');
     let url = 'https://api.github.com/repos/' + repo + '/pulls?state=closed';
 
@@ -117,23 +154,16 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
  * Pings each page of a GitHub API query
  * @param url url to query GitHub API
  * @param token GitHub token for query
- * @return array of query promises to be acted on
+ * @return responses from the query
  */
 async function queryEachPage(url, token) {
     if (!url.includes("?")) url = url.concat("?per_page=50");
     else url = url.concat("&per_page=50");
 
-    let header = await fetch(url, {
-        method: 'GET',
-        headers: {
-            Authorization: 'token ' + token
-        }
-    }).then(result=>result.headers.get('link'));
-    const nPages = getNPages(header);
+    const nPages = await getNPages(url, token);
 
     let promises = [];
-    let i;
-    for (i = 1; i <= nPages; i++) {
+    for (let i = 1; i <= nPages; i++) {
         console.log("pinging page " + i);
         let pageUrl = url + "&page=" + i;
         promises.push(fetch(pageUrl, {
@@ -142,17 +172,30 @@ async function queryEachPage(url, token) {
                 Authorization: 'token ' + token
             }
         }).then(result=>{
-            console.log('got response');//todo
+            console.log('got response');
             return result.json()
         }));
     }
     return Promise.allSettled(promises);
 }
 
-function getNPages(header) {
+/**
+ * Find the number of pages for a given url
+ * @param url url to find number of pages of
+ * @param token OAuth token for query
+ * @returns number of pages if valid header for the given url
+ */
+async function getNPages(url, token) {
+    let header = await fetch(url, {
+        method: 'GET',
+        headers: {
+            Authorization: 'token ' + token
+        }
+    }).then(result=>result.headers.get('link'));
+
     if (header) {
         if (!header.includes('rel="last"')) return null;
-        const map = parseHeader(header);
+        const map = parseLinkHeader(header);
         if (!map) return null;
         const url = map.get('last')
         return parseInt(url.split('&page=')[1]);
@@ -160,8 +203,13 @@ function getNPages(header) {
     return 1;
 }
 
-//todo name parseLinkHeader
-function parseHeader(header) {
+/**
+ * Create a map for a GitHub API link header,
+ * which may contain some combination of rel's; the next, previous, first, and last page.
+ * @param header link header to be parsed
+ * @returns map of rel:url if header is valid, otherwise null
+ */
+function parseLinkHeader(header) {
     try {
         if (!header) return null;
         let pages = header.split(', ');
@@ -177,21 +225,14 @@ function parseHeader(header) {
     } catch (e) {return null}
 }
 
-module.exports.parseHeader = parseHeader;//todo
-module.exports.getNPages = getNPages;
-module.exports.addCookie = addCookie;
-module.exports.getCookie = getCookie;
-module.exports.cluster = cluster;
-module.exports.max = max;
-
-function chart() {
-    //todo wrap these in a function?
-    const repo = document.getElementById('repo').value;
-    if (repo === '') {
-        alert("repo not entered")
-        return false;
-    }
-
+/**
+ * Gets the OAuth token
+ * If a new token is inputted, a cookie is created for it
+ * @returns token newly inputted by the user if it exists;
+ * otherwise cookie token if it exists;
+ * otherwise undefined
+ */
+function getToken() {
     const tokenCookie = getCookie('token');
     let token = document.getElementById('token').value;
     if (token !== '') {
@@ -201,28 +242,55 @@ function chart() {
         if (tokenCookie) {
             token = tokenCookie.value;
         } else {
-            alert('token expired/not entered');
-            return false;
+            return undefined;
         }
+    }
+    return token;
+}
+
+/**
+ * On 'Submit' button clicked,
+ * gets and displays data for some user inputted GitHub repository and OAuth token
+ */
+async function run() {
+    const repo = document.getElementById('repo').value;
+    if (!repo) {
+        alert("repo not entered");
+        return;
+    }
+    const token = getToken();
+    if (!token) {
+        alert("token expired/not entered")
+        return;
     }
 
     document.getElementById('repo').value = '';
     document.getElementById('token').value = '';
-    document.getElementById("loader").style.visibility="visible";
+    document.getElementById("loader").style.visibility = "visible";
 
-    getData(repo, token).then((data)=> {
-        console.log("done");
-        const clusters = cluster(data, v=>{
-            if (v) return v.commits+v.issues+v.pullRequests
-        });
-        display(clusters);
-        document.getElementById("loader").style.visibility = "hidden";
-        document.getElementById('oauthButton').style.display='block';
-        document.getElementById('oauthText').style.display='none';
-        document.getElementById('token').style.display='none';
+    const data = await getData(repo, token);
+    console.log("done");
+    addCookie(repo, data);
+    const clusters = cluster(data, v => {
+        if (v) return v.commits + v.issues + v.pullRequests;
     });
+    display(clusters);
+
+    document.getElementById("loader").style.visibility = "hidden";
+    document.getElementById('oauthButton').style.display = 'block';
+    document.getElementById('oauthText').style.display = 'none';
+    document.getElementById('token').style.display = 'none';
 }
 
+/**
+ * Gets data from the given repo
+ * -number of commits by each author
+ * -number of issues resolved by each author
+ * -number of pull requests reviewed by each author
+ * @param repo repo to be queried
+ * @param token OAuth token for query
+ * @returns data collected
+ */
 async function getData(repo, token) {
     console.log(document.cookie);
     const repoCookie = getCookie(repo);
@@ -239,10 +307,15 @@ async function getData(repo, token) {
         if (!v.pullRequests) v.pullRequests=0;
     }
     //todo order; also then can cluster more efficiently maybe
-    addCookie(repo, data);
     return data;
 }
 
+/**
+ * Adds the given key-value pair to the cookie
+ * @param key key to add
+ * @param value value to add
+ * @returns new cookie if valid key & value, otherwise null
+ */
 function addCookie(key, value) {
     if (!key || !value) {
         console.log('appending cookie failed');
@@ -257,7 +330,6 @@ function addCookie(key, value) {
     let temp = {value:JSON.parse(JSON.stringify(value))};
     let d = new Date();
     temp.expires = d.getTime() + EXPIRY_TIME;
-    //todo delete all expired cookies at some point?
 
     cookie[key] = temp; // insert or replace
     document.cookie = JSON.stringify(cookie);
@@ -265,6 +337,11 @@ function addCookie(key, value) {
     return cookie;
 }
 
+/**
+ * Gets the cookie value associated with the given key
+ * @param key key to find cookie value
+ * @returns value of cookie if found and not expired, otherwise undefined
+ */
 function getCookie(key) {
     try {
         const cookie = JSON.parse(document.cookie);
@@ -272,7 +349,7 @@ function getCookie(key) {
             console.log('found cookie for ' + key);
             let d = new Date();
             if (d.getTime() > cookie[key].expires) {
-                console.log('expired');
+                console.log('cookie expired');
                 return undefined;
             }
             console.log(cookie);
@@ -282,20 +359,27 @@ function getCookie(key) {
     } catch (e) {return undefined;}
 }
 
-// todo assumes data already normalised (contains only commits, issues, and pullRequests)
-// todo note some error handling will have to be done in f
-function cluster(data, f=v=>v) {//todo name f
-    if (!f) return null;
+/**
+ * Organises the given data into 3 bins of [data < 3, 3 <= data < 10, data > 10].
+ * Given data must contain numbers to be clustered by as described by the function 'num'
+ * @param data data to be clustered
+ * @param num function which returns the number value for each datum
+ * @returns {[{}, {}, {}]|null} array of 3 bins;
+ * will return empty values where a number can't be found;
+ * returns null if num is null/undefined
+ */
+function cluster(data, num=datum=>datum) {
+    if (!num) return null;
     let bin1 = 3, bin2 = 10; //todo make variable?
     let clusters = [{},{},{}];
     for (const k in data) {
         if (!data.hasOwnProperty(k)) continue;
-        const v = data[k];
-        const val = f(v);
+        const datum = data[k];
+        const val = num(datum);
         if (!val) continue;
-        if (val < bin1) clusters[2][k]=v;
-        else if (val < bin2) clusters[1][k]=v;
-        else if (val > bin2) clusters[0][k]=v;
+        if (val < bin1) clusters[2][k]=datum;
+        else if (val < bin2) clusters[1][k]=datum;
+        else if (val > bin2) clusters[0][k]=datum;
     }
     return clusters;
 }
@@ -304,7 +388,11 @@ function avg(author) {
     return author.commits + author.issues + author.pullRequests / 3;
 }
 
-//todo returns the max number value in an object and its children objects
+/**
+ * returns the max number value in an object and its children
+ * @param obj object to find max number of
+ * @returns {number} max number in obj
+ */
 function max(obj) {
     let m = -Infinity;
     if (obj) {
@@ -323,11 +411,17 @@ function max(obj) {
 }
 
 //todo ' (' + (data.get(d).type/avg(data.get(d))*100).toFixed()+'%)'
+/**
+ * Displays the given data as a list of split bar charts
+ * @param data data to be displayed split into clusters
+ */
 function display(data) {
     const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed'];
-    const titles = ['Cluster 1','Cluster 2','Cluster 3'];
+    const titles =[];
+    for (let i = 0; i < data.length; i++) {
+        titles.push('Cluster ' + (i+1));
+    }
     const maxInput = max(data);
-    console.log(maxInput);
 
     const width = 190;
     const height = 20;
@@ -381,32 +475,45 @@ function display(data) {
             .classed("author-text", true)
             .text(d => d);
 
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].commits);
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].issues);
-        appendBarColumn(rows, width, margin, authors, xScale, d=>data[i][d].pullRequests);
+        append(rows, width, margin, authors, xScale, d=>data[i][d].commits);
+        append(rows, width, margin, authors, xScale, d=>data[i][d].issues);
+        append(rows, width, margin, authors, xScale, d=>data[i][d].pullRequests);
     }
 }
 
-//todo name f; data? idk
-function appendBarColumn(rows, width, margin, authors, xScale, f) {
+/**
+ * Append a div of keys and bars for their data to a given row;
+ * i.e. key1 : key1DataBars, key2 : key2DataBars, etc.
+ * @param rows rows div to be added to
+ * @param width with of the bar column
+ * @param margin margin of the bar column
+ * @param keys keys to be added, and to access the data of the subsequent bars
+ * @param xScale scale of the bar column
+ * @param getVal function to find the value associated with each key
+ */
+function append(rows, width, margin, keys, xScale, getVal) {
     rows.append('div')
         .style("width", () => `${width}px`)
         .selectAll("div")
-        .data(authors)
+        .data(keys)
         .enter()
         .append("div")
         .style("width", () => `${width - margin}px`)
         .style("margin", () => `${margin}px`)
         .classed("background", true)
         .append("div")
-        .style("width", d => `${xScale(f(d))}px`)
+        .style("width", key => `${xScale(getVal(key))}px`)
         .classed("pull-request-bar", true)
         .append("p")
         .style("margin-left", () => `${margin}px`)
-        .text(d => f(d))
+        .text(key => getVal(key))
         .classed("label", true);
 }
 
+/**
+ * On 'New OAuth token' button clicked,
+ * allow user to input a new OAuth token
+ */
 function newOAuth() {
     document.getElementById('oauthButton').style.display='none'
     document.getElementById('oauthText').style.display='inline'

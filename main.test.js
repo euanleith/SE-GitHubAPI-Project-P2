@@ -1,20 +1,22 @@
 const myModule = require('./main');
+const EXPIRY_TIME = myModule.EXPIRY_TIME;
 const getNPages = myModule.getNPages;
-const parseHeader = myModule.parseHeader;
+const parseLinkHeader = myModule.parseLinkHeader;
 const addCookie = myModule.addCookie;
 const getCookie = myModule.getCookie;
 const cluster = myModule.cluster;
 const max = myModule.max;
+const getToken = myModule.getToken;
 
-//todo maybe do parseHeader properly with a library
-test('parseHeader & getNPages', () => {
+//todo maybe do parseLinkHeader properly with a library
+test('parseLinkHeader & getNPages', () => {
 
     // test null/undefined/empty
 
-    expect(parseHeader()).toBeNull();
-    expect(parseHeader(undefined)).toBeNull();
-    expect(parseHeader(null)).toBeNull();
-    expect(parseHeader('')).toBe(null);
+    expect(parseLinkHeader()).toBeNull();
+    expect(parseLinkHeader(undefined)).toBeNull();
+    expect(parseLinkHeader(null)).toBeNull();
+    expect(parseLinkHeader('')).toBe(null);
 
     expect(getNPages()).toBe(1);
     expect(getNPages(undefined)).toBe(1);
@@ -26,7 +28,7 @@ test('parseHeader & getNPages', () => {
     let header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next"';
     let map = new Map();
     map.set('next','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2');
-    let out = parseHeader(header);
+    let out = parseLinkHeader(header);
     expect(out).toEqual(map);
     expect(getNPages(header)).toBeNull();
 
@@ -35,7 +37,7 @@ test('parseHeader & getNPages', () => {
     map = new Map();
     map.set('next','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2');
     map.set('last','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34');
-    out = parseHeader(header);
+    out = parseLinkHeader(header);
     expect(out).toEqual(map);
     expect(getNPages(header)).toBe(34);
 
@@ -47,28 +49,28 @@ test('parseHeader & getNPages', () => {
     map.set('last','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=4');
     map.set('first','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=1');
     map.set('prev','https://api.github.com/search/code?q=addClass+user%3Amozilla&page=1');
-    out = parseHeader(header);
+    out = parseLinkHeader(header);
     expect(out).toEqual(map);
     expect(getNPages(header)).toBe(4);
 
     // test invalid
 
     header = 'https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15; rel="next"'
-    expect(parseHeader(header)).toBeNull();
+    expect(parseLinkHeader(header)).toBeNull();
     expect(getNPages(header)).toBeNull();
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15>'
-    expect(parseHeader(header)).toBeNull();
+    expect(parseLinkHeader(header)).toBeNull();
     expect(getNPages(header)).toBeNull();
 
     header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=15>; "nxt"'
-    expect(parseHeader(header)).toBeNull();
+    expect(parseLinkHeader(header)).toBeNull();
     expect(getNPages(header)).toBeNull();
 
     //todo
     // header = '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=2>; rel="next" ' +
     //     '<https://api.github.com/search/code?q=addClass+user%3Amozilla&page=34>; rel="last"'
-    // expect(parseHeader(header)).toBeNull();
+    // expect(parseLinkHeader(header)).toBeNull();
     // expect(getNPages(header)).toBeNull();
 });
 
@@ -135,16 +137,16 @@ test('addCookie & getCookie', () => {
 });
 
 test('cluster',() => {
-    let f = v => {
+    let num = v => {
         if (v) return v.commits + v.issues + v.pullRequests;
     };//todo name
 
     // test undefined/null/empty
 
     expect(cluster()).toEqual([{},{},{}]);
-    expect(cluster(undefined,f)).toEqual([{},{},{}]);
-    expect(cluster(null,f)).toEqual([{},{},{}]);
-    expect(cluster({},f)).toEqual([{},{},{}]);
+    expect(cluster(undefined,num)).toEqual([{},{},{}]);
+    expect(cluster(null,num)).toEqual([{},{},{}]);
+    expect(cluster({},num)).toEqual([{},{},{}]);
 
     let data = {};
     let val1 = 3;
@@ -162,15 +164,15 @@ test('cluster',() => {
 
     val1 = {commits:1,issues:2,pullRequests:3};
     data['key1']=val1;
-    expect(cluster(data, f)).toEqual([{},{key1:val1},{}]);
+    expect(cluster(data,num)).toEqual([{},{key1:val1},{}]);
 
     let val2 = {commits:0,issues:0,pullRequests:1};
     data['key2']=val2;
-    expect(cluster(data, f)).toEqual([{},{key1:val1},{key2:val2}]);
+    expect(cluster(data,num)).toEqual([{},{key1:val1},{key2:val2}]);
 
     let val3 = {commits:3,issues:4,pullRequests:-1};
     data['key3']=val3;
-    expect(cluster(data, f)).toEqual([{},{key1:val1,key3:val3},{key2:val2}]);
+    expect(cluster(data,num)).toEqual([{},{key1:val1,key3:val3},{key2:val2}]);
 
     data = {};
     val1 = {a:'v1',b:1,c:'v2'};
@@ -180,15 +182,15 @@ test('cluster',() => {
     data = {};
     val1 = {commits:10,issues:10,pullRequests:10};
     data['key1']=val1;
-    expect(cluster(data, f)).toEqual([{key1:val1},{},{}]);
+    expect(cluster(data,num)).toEqual([{key1:val1},{},{}]);
 
     // test invalid
 
     data['key2']=undefined;
-    expect(cluster(data, f)).toEqual([{key1:val1},{},{}]);
+    expect(cluster(data,num)).toEqual([{key1:val1},{},{}]);
 
     data['key2']={commits:1};
-    expect(cluster(data, f)).toEqual([{key1:val1},{},{}]);
+    expect(cluster(data,num)).toEqual([{key1:val1},{},{}]);
 });
 
 test('max', () => {
@@ -209,4 +211,22 @@ test('max', () => {
     expect(max([{a:1,b:true,c:{}},{a:5,b:'str',c:2}])).toBe(5);
 
     // test invalid input todo are there any?
+});
+
+//todo
+test('getToken', () => {
+    let d = new Date();
+
+    // test undefined/null/empty
+    document.cookie = undefined;
+    expect(getToken()).toBeUndefined();
+    document.cookie = `{"token":{"value":"","expires":${d.getTime()}}}`;
+    expect(getToken()).toBeUndefined();
+
+    // test std
+    document.cookie=undefined;
+    document.cookie = JSON.stringify({token:{value:"myToken",expires:d.getTime() + EXPIRY_TIME}});
+    document.getElementById('token').value = '';//todo need to load window first...
+    expect(getToken()).toBe("myToken");
+    // test invalid
 });
