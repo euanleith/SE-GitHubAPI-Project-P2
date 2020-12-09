@@ -5,7 +5,7 @@
 // -invalid repo
 // -other
 //todo misc bugs
-// -fcitx/fcitx5 some data doesn't have authors
+// -fcitx/fcitx5 some data doesn't have authors -> it's just that the margins between the authors is less than that between the bars
 // -GerardColman/DieRoller commits (and probably issues&prs) can be null
 // -web-flow?
 // -doesn't recognise module
@@ -39,7 +39,13 @@ async function getNCommitsByAuthor(repo, token, data) {
     for (const promise of promises) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
-            const author = text[i]['committer']['login'];
+            let author;
+            try {
+                author = text[i]['committer']['login'];
+            } catch (e) {
+                console.error(e);
+                continue;
+            }
             if (!data[author]) data[author] = {commits:1};
             else if (!data[author].commits) data[author].commits=1;
             else data[author].commits++;
@@ -71,8 +77,14 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
     for (const promise of promises) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
-            const num = text[i]['number'];
-            console.log("pinging issue events " + num);
+            let num;
+            try {
+                num = text[i]['number'];
+            } catch (e) {
+                console.error(e);
+                continue;
+            }
+            console.log("pinging issue events");
             let url = 'https://api.github.com/repos/' + repo + '/issues/' + num + '/events';
             promisesPages.push(queryEachPage(url, token));
         }
@@ -86,11 +98,15 @@ async function getNIssuesResolvedByAuthor(repo, token, data) {
             const promiseEvents = promisesEventsPage.value;
             for (const promiseEvent of promiseEvents) {
                 let events = promiseEvent.value;
-                const closedEvent = events.find(e => e['event'] === "closed");//todo case where can't find it
-                const actor = closedEvent['actor'];
                 let author;
-                if (actor === null) author = "null";
-                else author = actor['login'];
+                try {
+                    const closedEvent = events.find(e => e['event'] === "closed");
+                    const actor = closedEvent['actor'];
+                    author = actor['login'];
+                } catch (e) {
+                    console.error(e);
+                    continue;
+                }
                 if (!data[author]) data[author] = {issues:1};
                 else if (!data[author].issues) data[author].issues=1;
                 else data[author].issues++;
@@ -123,8 +139,14 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
     for (const promise of promises) {
         let text = promise.value;
         for (let i = 0; i < text.length; i++) {
-            const num = text[i]['number'];
-            console.log("pinging pull request reviews " + num);
+            let num;
+            try {
+                num = text[i]['number'];
+            } catch (e) {
+                console.error(e);
+                continue;
+            }
+            console.log("pinging pull request reviews");
             let url = 'https://api.github.com/repos/' + repo + '/pulls/' + num + '/reviews';
             promisesPages.push(queryEachPage(url, token));
         }
@@ -139,7 +161,13 @@ async function getNPullRequestsReviewedByAuthor(repo, token, data) {
             for (const promiseReview of promiseReviews) {
                 const reviews = promiseReview.value;
                 for (const review of reviews) {
-                    let author = review['user']['login'];
+                    let author;
+                    try {
+                        author = review['user']['login'];
+                    } catch (e) {
+                        console.error(e);
+                        continue;
+                    }
                     if (!data[author]) data[author] = {pullRequests:1};
                     else if (!data[author].pullRequests) data[author].pullRequests=1;
                     else data[author].pullRequests++;
@@ -166,15 +194,17 @@ async function queryEachPage(url, token) {
     for (let i = 1; i <= nPages; i++) {
         console.log("pinging page " + i);
         let pageUrl = url + "&page=" + i;
-        promises.push(fetch(pageUrl, {
+        promises.push(
+            fetch(pageUrl, {
             method: 'GET',
-            headers: {
-                Authorization: 'token ' + token
-            }
-        }).then(result=>{
-            console.log('got response');
-            return result.json()
-        }));
+            headers: {Authorization: 'token ' + token}
+            })
+            .then(response=>{
+                if (!response.ok) return {};//todo
+                console.log('got response');
+                return response.json();
+            })
+        );
     }
     return Promise.allSettled(promises);
 }
@@ -188,10 +218,12 @@ async function queryEachPage(url, token) {
 async function getNPages(url, token) {
     let header = await fetch(url, {
         method: 'GET',
-        headers: {
-            Authorization: 'token ' + token
-        }
-    }).then(result=>result.headers.get('link'));
+        headers: {Authorization: 'token ' + token}
+        })
+        .then(response=>{
+            if (!response.ok) return {};//todo
+            return response.headers.get('link');
+        });
 
     if (header) {
         if (!header.includes('rel="last"')) return null;
@@ -260,7 +292,12 @@ async function run() {
     }
     const token = getToken();
     if (!token) {
-        alert("token expired/not entered")
+        alert("token expired/not entered");
+        return;
+    }
+
+    if (!await isValidQuery(repo, token)) {
+        alert("invalid query");
         return;
     }
 
@@ -280,6 +317,18 @@ async function run() {
     document.getElementById('oauthButton').style.display = 'block';
     document.getElementById('oauthText').style.display = 'none';
     document.getElementById('token').style.display = 'none';
+}
+
+async function isValidQuery(repo, token) {
+    const url = 'https://api.github.com/repos/'+repo;
+    return await fetch(url, {
+        method: 'GET',
+        headers: {Authorization: 'token ' + token}
+        })
+        .then(response=>{
+            if (!response.ok) return null;
+            return response.json();
+        });
 }
 
 /**
@@ -416,6 +465,18 @@ function max(obj) {
  * @param data data to be displayed split into clusters
  */
 function display(data) {
+    let foundData = false;
+    for (const datum of data) {
+        if (datum.length !== 0) {
+            foundData = true;
+            break;
+        }
+    }
+    if (!foundData) {
+        alert('no data found!');
+        return;
+    }
+
     const dataTypes = ['','Author','No. commits','No. issues resolved',' No. pull requests reviewed'];
     const titles =[];
     for (let i = 0; i < data.length; i++) {
