@@ -1,4 +1,4 @@
-const EXPIRY_TIME = 480000; // 8 minutes
+const EXPIRY_TIME = 8.64e+7; // 1 day (in ms)
 const MAX_PAGES = 10;
 const BIN_1 = 3;
 const BIN_2 = 10;
@@ -297,7 +297,7 @@ async function run() {
 
     const data = await getData(repo, token);
     console.log("done");
-    addCookie(repo, data);//todo this isn't updating expiry when repo cookie already exists?
+    addCookie(repo, data);
     const clusters = cluster(data, v => {
         if (v) return v.commits + v.issues + v.pullRequests;
     });
